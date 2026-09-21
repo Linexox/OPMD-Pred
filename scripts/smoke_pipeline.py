@@ -2,7 +2,8 @@
 """本地自检（不需要 GPU、不需要 ViT 权重）：
 
 1. InterSHAP / SII 的数学性质：用已知的 2-additive 合成博弈反解 Φ_ij 与 φ_i
-2. 端到端 mini 流水线：伪造图像缓存 → 2 折 × 少量 epoch 的对比预训练 + 任务训练
+1b. 两个任务头（MSE / CORAL）的形状自检
+2. 端到端 mini 流水线：伪造图像缓存 → 2 折 × 少量 epoch 的对比预训练 + 任务训练（两个头）
 3. 解释模块：InterSHAP（含 missing token 屏蔽）+ 表格精确 Shapley 跑通
 
 用法：
@@ -75,6 +76,44 @@ def test_game_theory_weights(seed: int = 0) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 1b. 两个任务头的形状自检（MSE / CORAL）
+# ---------------------------------------------------------------------------
+def test_heads() -> None:
+    """两个头都跑一次前向 + 损失 + 连续预测，防止只测 MSE 漏掉 CORAL 的形状 bug。"""
+    from opmd_pred.config import N_CLASSES
+    from opmd_pred.models.losses import coral_loss
+
+    rng = np.random.default_rng(0)
+    n = 5
+    missing = torch.zeros(n, N_MOD, dtype=torch.bool)
+    x = {
+        "image": torch.randn(n, ModelConfig().image.embed_dim),
+        "exfoliative": torch.randn(n, 10),
+        "methylation": torch.randn(n, 1),
+        "basic": torch.randn(n, 1),
+    }
+    y = torch.tensor([0, 1, 2, 3, 2])
+
+    for head in ("mse", "coral"):
+        model = CMFModel(ModelConfig(), head=head).eval()
+        out = model(x, missing)
+        cont = model.predict_continuous(x, missing)
+        assert cont.shape == (n,), f"{head}: predict_continuous 形状 {tuple(cont.shape)}"
+        if head == "mse":
+            assert out["pred"].shape == (n,), f"mse head 形状 {tuple(out['pred'].shape)}"
+            loss = torch.nn.functional.mse_loss(out["pred"], y.float())
+        else:
+            assert out["pred"].shape == (n, N_CLASSES - 1), \
+                f"coral head 形状 {tuple(out['pred'].shape)}，应为 {(n, N_CLASSES - 1)}"
+            loss = coral_loss(out["pred"], y, N_CLASSES)
+            # 序概率应随阈值单调不增，且期望值落在 [0, K-1]
+            assert torch.all((cont >= 0) & (cont <= N_CLASSES - 1)), "CORAL 期望值越界"
+        assert torch.isfinite(loss), f"{head}: loss 非有限"
+        print(f"[heads] {head:5s} ok — pred={tuple(out['pred'].shape)} "
+              f"cont={tuple(cont.shape)} loss={loss.item():.4f}")
+
+
+# ---------------------------------------------------------------------------
 # 2. 伪造图像缓存（跳过 ViT，验证流程本身）
 # ---------------------------------------------------------------------------
 def build_fake_cache(records, out_dir: Path, dim: int = 768, n_aug: int = 3,
@@ -107,6 +146,7 @@ def build_fake_cache(records, out_dir: Path, dim: int = 768, n_aug: int = 3,
 # ---------------------------------------------------------------------------
 def main() -> None:
     test_game_theory_weights()
+    test_heads()
 
     paths = Paths()
     device = "cpu"
@@ -117,33 +157,38 @@ def main() -> None:
     print(f"[cache] fake cache -> {cache_dir}")
 
     folds = make_folds(records, CVConfig(seed=42))
-    cfg = TrainConfig(head="mse")
-    cfg.pretrain_epochs, cfg.train_epochs = 2, 3
 
-    for fold in folds[:2]:
-        torch.manual_seed(0)
-        rng = np.random.default_rng(0)
-        prep = fit_preprocessor(records, fold)
-        data = build_fold_data(records, fold, prep, cache_dir)
-        n_img = sum(s.has_image for s in data.train + data.val + data.test)
-        print(f"\n[fold {fold.fold}] train {len(data.train)} / val {len(data.val)} "
-              f"/ test {len(data.test)}, 有图像样本 {n_img}")
+    # 两个头都走端到端（CORAL 只跑 1 折；解释模块与 head 无关，只跑一次）
+    for head, n_folds in (("mse", 2), ("coral", 1)):
+        cfg = TrainConfig(head=head)
+        cfg.pretrain_epochs, cfg.train_epochs = 2, 3
+        for fold in folds[:n_folds]:
+            torch.manual_seed(0)
+            rng = np.random.default_rng(0)
+            prep = fit_preprocessor(records, fold)
+            data = build_fold_data(records, fold, prep, cache_dir)
+            n_img = sum(s.has_image for s in data.train + data.val + data.test)
+            print(f"\n[head={head} fold {fold.fold}] train {len(data.train)} / val {len(data.val)} "
+                  f"/ test {len(data.test)}, 有图像样本 {n_img}")
 
-        model = CMFModel(ModelConfig(), head="mse")
-        pretrain_fold(model, data, cfg, device, rng, log_every=1)
-        metric, _ = train_fold(model, data, cfg, device, rng)
-        print("  [test] " + "  ".join(f"{k}={v:.4f}" for k, v in metric.items()
-                                      if isinstance(v, float)))
+            model = CMFModel(ModelConfig(), head=head)
+            pretrain_fold(model, data, cfg, device, rng, log_every=1)
+            metric, _ = train_fold(model, data, cfg, device, rng)
+            print(f"  [test] " + "  ".join(f"{k}={v:.4f}" for k, v in metric.items()
+                                           if isinstance(v, float)))
 
-        res = intershap(model, data.test[:3], device)
-        g, mat = global_intershap(res, complete_case_only=False)
-        assert res.phi_matrix.shape == (3, N_MOD, N_MOD)
-        assert res.intershap_local.shape == (3,)
-        print(f"  [intershap] local={np.round(res.intershap_local, 4).tolist()} global={g:.4f}")
+            if head != "mse":
+                continue
 
-        bg = subsample_background(data.train, max_n=4)
-        phi = tabular_shapley(model, data.test[0], bg, device)
-        print(f"  [shap] shape={phi.shape} group={modality_group_shapley(phi)}")
+            res = intershap(model, data.test[:3], device)
+            g, mat = global_intershap(res, complete_case_only=False)
+            assert res.phi_matrix.shape == (3, N_MOD, N_MOD)
+            assert res.intershap_local.shape == (3,)
+            print(f"  [intershap] local={np.round(res.intershap_local, 4).tolist()} global={g:.4f}")
+
+            bg = subsample_background(data.train, max_n=4)
+            phi = tabular_shapley(model, data.test[0], bg, device)
+            print(f"  [shap] shape={phi.shape} group={modality_group_shapley(phi)}")
 
     print("\n[OK] smoke pipeline 全部通过")
 

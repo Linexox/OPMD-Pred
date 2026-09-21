@@ -31,7 +31,8 @@ class CoralHead(nn.Module):
         self.biases = nn.Parameter(torch.zeros(n_classes - 1))
 
     def forward(self, g: torch.Tensor) -> torch.Tensor:
-        return self.fc(g).squeeze(-1) - self.biases          # (B, K-1)
+        # fc(g): (B,1)；biases: (K-1,) → 广播成 (B, K-1)
+        return self.fc(g) - self.biases                      # (B, K-1)
 
     @staticmethod
     def expected_value(logits: torch.Tensor) -> torch.Tensor:
