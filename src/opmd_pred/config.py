@@ -34,7 +34,7 @@ EXFOLIATIVE_FEATURES = EXFOLIATIVE_CAT + EXFOLIATIVE_NUM
 # 模态二：甲基化（1 维）
 METHYLATION_FEATURES = ["甲基化总数"]
 
-# 模态三：基本信息（1 维；性别数据暂缺，后续加回）
+# 模态三：基本信息（1 维）
 BASIC_FEATURES = ["age"]
 
 MODALITIES = ["image", "exfoliative", "methylation", "basic"]
@@ -60,9 +60,7 @@ ORDINAL_MAPS: dict[str, dict[str, float]] = {
     },
 }
 # 二值类别映射：key=阴性取值；其他非空取值一律记 1（阳性/检出）
-BINARY_MAPS: dict[str, str] = {
-    "病原体": "未见",
-}
+BINARY_MAPS: dict[str, str] = {"病原体": "未见"}
 
 # 计数特征做 log1p 再标准化（跨度 54 ~ 86,000，重右偏）
 LOG1P_FEATURES = set(EXFOLIATIVE_NUM)
@@ -86,6 +84,7 @@ class ImageConfig:
 class ModelConfig:
     tabular_hidden: int = 64     # 每个表格模态 MLP 输出维
     fusion_dim: int = 128        # 融合 MLP 中间维
+    proj_dim: int = 128          # 对比空间投影维（z_m / z_f 共用）
     dropout: float = 0.1
     image: ImageConfig = field(default_factory=ImageConfig)
 

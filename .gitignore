@@ -11,3 +11,8 @@ wheels/
 
 data/
 reports/
+features/
+artifacts/
+*.tar
+*.tar.gz
+*.npz

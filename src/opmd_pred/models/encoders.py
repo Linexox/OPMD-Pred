@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+from torchvision import transforms
+from transformers import ViTImageProcessor
+
 
 
 class ViTEncoder(nn.Module):
@@ -33,18 +36,10 @@ class ViTEncoder(nn.Module):
 
 
 def get_image_processor(model_id: str = "google/vit-base-patch16-224-in21k"):
-    from transformers import ViTImageProcessor
-
     return ViTImageProcessor.from_pretrained(model_id)
 
 
 def build_train_augment(image_size: int = 224):
-    """训练增强：随机裁剪 + 水平翻转 + 轻颜色抖动 + 小角度旋转。
-
-    返回 PIL -> PIL 的 transform，归一化交给 ViTImageProcessor 统一做。
-    """
-    from torchvision import transforms
-
     return transforms.Compose(
         [
             transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0), ratio=(0.9, 1.1)),
@@ -56,8 +51,6 @@ def build_train_augment(image_size: int = 224):
 
 
 def build_eval_resize(image_size: int = 224):
-    from torchvision import transforms
-
     return transforms.Compose(
         [
             transforms.Resize((image_size, image_size)),
@@ -66,7 +59,7 @@ def build_eval_resize(image_size: int = 224):
 
 
 class TabularEncoder(nn.Module):
-    """表格模态 MLP：in_dim -> hidden -> hidden。"""
+    """表格模态 MLP: in_dim -> hidden -> hidden"""
 
     def __init__(self, in_dim: int, hidden: int, dropout: float = 0.1):
         super().__init__()
@@ -83,12 +76,15 @@ class TabularEncoder(nn.Module):
 
 
 class MissingTokens(nn.Module):
-    """每个模态一个可学习向量，模态缺失时替换该模态表征（Gu 2025 的 E_c/E_t）。"""
+    """每个模态一个可学习向量, 模态缺失时替换该模态表征"""
 
     def __init__(self, modality_dims: dict[str, int]):
         super().__init__()
         self.tokens = nn.ParameterDict(
-            {m: nn.Parameter(torch.zeros(d)) for m, d in modality_dims.items()}
+            {
+                m: nn.Parameter(torch.zeros(d))
+                for m, d in modality_dims.items()
+            }
         )
         for t in self.tokens.values():
             nn.init.normal_(t, std=0.02)
