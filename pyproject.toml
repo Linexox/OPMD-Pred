@@ -6,8 +6,19 @@ readme = "README.md"
 authors = [
     { name = "linexox", email = "linexox7@gmail.com" }
 ]
-requires-python = ">=3.14"
-dependencies = []
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "torch>=2.4",
+    "transformers>=4.45",
+    "scikit-learn>=1.5",
+    "pandas>=2.2",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+    "pillow>=10.4",
+    "matplotlib>=3.9",
+    "pyarrow>=17.0",
+    "joblib>=1.4",
+]
 
 [project.scripts]
 opmd-pred = "opmd_pred:main"
