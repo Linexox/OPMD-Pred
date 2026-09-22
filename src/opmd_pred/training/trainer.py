@@ -116,7 +116,8 @@ def train_fold(
     combos = [c.to(device) for c in ALL_COMBOS]
     history: list[float] = []
     best = {"qwk": -2.0, "mae": 99.0, "state": None}
-    patience, bad = 30, 0
+    # 全批量训练：1 epoch = 1 步，耐心必须按步计（默认 300 步）
+    patience, bad = cfg.early_stop_patience, 0
 
     for ep in range(cfg.train_epochs):
         model.train()

@@ -35,7 +35,8 @@ from opmd_pred.training.dataset import build_fold_data, fit_preprocessor
 from opmd_pred.training.metrics import mean_std_report
 from opmd_pred.training.trainer import evaluate, pretrain_fold, train_fold
 
-METRIC_KEYS = ["qwk", "mae", "mae_cont", "acc_1off", "macro_f1"]
+# 坍塌诊断：pred_std 接近 0 = 模型退化成常数预测，此时 QWK/MAE 会"看起来还行"但毫无判别力
+METRIC_KEYS = ["qwk", "mae", "mae_cont", "acc_1off", "macro_f1", "pred_std"]
 
 
 def build_argparser() -> argparse.ArgumentParser:
@@ -49,6 +50,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--pretrain-epochs", type=int, default=None)
     p.add_argument("--train-epochs", type=int, default=None)
     p.add_argument("--lr", type=float, default=None, help="覆盖阶段C学习率")
+    p.add_argument("--patience", type=int, default=None, help="早停耐心（单位=步，全批量下 1 epoch=1 步）")
     p.add_argument("--folds", default=None, help="只跑指定折，逗号分隔，如 0,1,2")
     p.add_argument("--cache-dir", default=None, help="图像嵌入缓存目录，默认 features/image_cache")
     p.add_argument("--skip-pretrain", action="store_true", help="消融：跳过阶段B")
@@ -70,6 +72,8 @@ def main() -> None:
         cfg_train.train_epochs = args.train_epochs
     if args.lr is not None:
         cfg_train.train_lr = args.lr
+    if args.patience is not None:
+        cfg_train.early_stop_patience = args.patience
 
     out_dir = paths.artifacts / args.tag
     for sub in ("models", "scalers"):
@@ -125,10 +129,14 @@ def main() -> None:
             json.dumps(history), encoding="utf-8")
 
         row = {"fold": fold.fold, **{k: float(metric[k]) for k in METRIC_KEYS}}
+        row["pred_mean"] = float(metric["pred_mean"])
         val = evaluate(model, data.val, device)
         row.update({f"val_{k}": float(val[k]) for k in METRIC_KEYS})
         per_fold.append(row)
         print("  [test] " + "  ".join(f"{k}={row[k]:.4f}" for k in METRIC_KEYS))
+        if row["pred_std"] < 0.1:
+            print(f"  [WARN] 本折预测近乎常数（std={row['pred_std']:.4f}, "
+                  f"mean={row['pred_mean']:.4f}）→ 模型未学到判别信息，指标不可信")
 
     if not per_fold:
         print("[warn] 没有跑任何折")

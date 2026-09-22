@@ -20,6 +20,9 @@ def ordinal_metrics(y_true: np.ndarray, y_cont: np.ndarray) -> dict[str, float]:
         "mae_cont": float(np.mean(np.abs(y_cont - y_true))),
         "acc_1off": float(np.mean(np.abs(yp - y_true) <= 1)),
         "macro_f1": float(f1_score(y_true, yp, labels=[0, 1, 2, 3], average="macro", zero_division=0)),
+        # 坍塌诊断：预测几乎不动（std→0）或整体偏移过大时，前 5 项指标会"看起来还行但毫无判别力"
+        "pred_std": float(np.std(y_cont)),
+        "pred_mean": float(np.mean(y_cont)),
     }
 
 

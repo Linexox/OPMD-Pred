@@ -101,14 +101,19 @@ class CVConfig:
 
 @dataclass
 class TrainConfig:
+    """注意：本项目是**全批量**训练（train≈45 样本一次进 batch），
+    因此 1 epoch = 1 次梯度更新。步数必须按"步"而不是按"轮"来想：
+    150 epoch 只等于 150 步，模型连"预测常数均值"都收敛不到（已实测坍塌）。
+    默认值按 ≥1000 步设定，早停耐心也同步放大。"""
     # 阶段B：有监督对比预训练（只用 56 名标注患者）
-    pretrain_epochs: int = 100
-    pretrain_lr: float = 1e-4
+    pretrain_epochs: int = 500
+    pretrain_lr: float = 1e-3
     temperature: float = 0.5     # sigmoid 对比损失的 t 初值
     # 阶段C：目标任务（MSE 回归为主，CORAL 为消融对照）
-    train_epochs: int = 150
-    train_lr: float = 1e-4
+    train_epochs: int = 2000
+    train_lr: float = 3e-3
     weight_decay: float = 1e-4
+    early_stop_patience: int = 300   # 单位=步（=epoch，因为全批量）
     head: str = "mse"            # "mse" | "coral"
 
 
