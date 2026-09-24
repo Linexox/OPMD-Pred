@@ -1,15 +1,15 @@
 import argparse
-from itertools import combinations
 from pathlib import Path
+from loguru import logger
+from itertools import combinations
 
 import torch
 from torch.utils.data import DataLoader
-from loguru import logger
 
-from src.data.sysu import SysuDataset, load_sysu_records, split_sysu_records
-from src.model.fusion import MultimodalOrdinalModel
-from src.model.losses import info_nce_loss
-from src.scripts.common import configure_logger, device_name, set_seed
+from opmd_pred.data.sysu import SysuDataset, load_sysu_records, split_sysu_records
+from opmd_pred.model.fusion import MultimodalOrdinalModel
+from opmd_pred.model.losses import info_nce_loss
+from opmd_pred.scripts.common import configure_logger, device_name, set_seed
 
 
 def parse_args():

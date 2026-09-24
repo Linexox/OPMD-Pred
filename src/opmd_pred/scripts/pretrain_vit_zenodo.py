@@ -5,9 +5,9 @@ import torch
 from torch.utils.data import DataLoader
 from loguru import logger
 
-from src.data.zenodo import CATEGORIES, ZenodoImageDataset, split_by_patient
-from src.model.vit import ZenodoViTClassifier
-from src.scripts.common import configure_logger, device_name, set_seed
+from opmd_pred.data.zenodo import CATEGORIES, ZenodoImageDataset, split_by_patient
+from opmd_pred.model.vit import ZenodoViTClassifier
+from opmd_pred.scripts.common import configure_logger, device_name, set_seed
 
 
 def parse_args():

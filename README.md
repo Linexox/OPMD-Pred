@@ -1,8 +1,8 @@
 ## 目录
 
-- `src/data`：SYSU/Zenodo 数据集读取、数值归一化、图像变换和数据划分。
-- `src/model`：ViT 图像编码器、多模态融合、missing token 和序数回归头。
-- `src/scripts`：Zenodo 图像预训练、SYSU 多模态对比预训练和目标训练。
+- `src/opmd_pred/data`：SYSU/Zenodo 数据集读取、数值归一化、图像变换和数据划分。
+- `src/opmd_pred/model`：ViT 图像编码器、多模态融合、missing token 和序数回归头。
+- `src/opmd_pred/scripts`：Zenodo 图像预训练、SYSU 多模态对比预训练和目标训练。
 - `scripts`：一次性数据整理脚本。
 - `outputs`：运行时生成的 checkpoint 和 `train.log`。
 
@@ -27,20 +27,20 @@ uv run python scripts/prepare_sysu.py
 先按患者划分 Zenodo 图像并训练 ViT：
 
 ```bash
-uv run python -m src.scripts.pretrain_vit_zenodo
+uv run python -m opmd_pred.scripts.pretrain_vit_zenodo
 ```
 
 再进行 SYSU 跨模态对比预训练：
 
 ```bash
-uv run python -m src.scripts.pretrain_multimodal \
+uv run python -m opmd_pred.scripts.pretrain_multimodal \
   --image-checkpoint outputs/zenodo_vit/checkpoint.pt
 ```
 
 最后进行序数目标训练：
 
 ```bash
-uv run python -m src.scripts.train_multimodal \
+uv run python -m opmd_pred.scripts.train_multimodal \
   --image-checkpoint outputs/zenodo_vit/checkpoint.pt \
   --fusion-checkpoint outputs/multimodal_contrastive/checkpoint.pt
 ```
