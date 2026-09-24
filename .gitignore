@@ -5,14 +5,13 @@ build/
 dist/
 wheels/
 *.egg-info
+.pytest_cache/
 
 # Virtual environments
 .venv
 
-data/
-reports/
-features/
-artifacts/
-*.tar
-*.tar.gz
-*.npz
+# Local credentials and experiment artifacts
+.env
+.env.*
+/data/
+/outputs/

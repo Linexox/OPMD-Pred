@@ -1,0 +1,4 @@
+interface:
+  display_name: "远程服务器访问"
+  short_description: "提供公共远程服务器的登录、初始化与个人目录安全操作指引"
+  default_prompt: "请按项目约定指导我登录远程服务器并在个人目录中完成初始化。"

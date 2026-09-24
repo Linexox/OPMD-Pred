@@ -6,18 +6,13 @@ readme = "README.md"
 authors = [
     { name = "linexox", email = "linexox7@gmail.com" }
 ]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11"
 dependencies = [
-    "torch>=2.4",
-    "transformers>=4.45",
-    "scikit-learn>=1.5",
-    "pandas>=2.2",
-    "pyyaml>=6.0",
-    "tqdm>=4.66",
-    "pillow>=10.4",
-    "matplotlib>=3.9",
-    "pyarrow>=17.0",
-    "joblib>=1.4",
+    "loguru>=0.7.3",
+    "openpyxl>=3.1.5",
+    "pillow>=11.0.0",
+    "torch>=2.6.0",
+    "torchvision>=0.21.0",
 ]
 
 [project.scripts]
@@ -26,8 +21,3 @@ opmd-pred = "opmd_pred:main"
 [build-system]
 requires = ["uv_build>=0.12.1,<0.13.0"]
 build-backend = "uv_build"
-
-[[tool.uv.index]]
-name = "aliyun"
-url = "https://mirrors.aliyun.com/pypi/simple"
-default = true
