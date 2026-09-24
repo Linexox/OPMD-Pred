@@ -3,7 +3,7 @@ import random
 from pathlib import Path
 
 import torch
-from PIL import Image
+from PIL import Image, ImageFile
 from torch.utils.data import Dataset
 from loguru import logger
 
@@ -11,6 +11,7 @@ from .transforms import make_image_transform
 
 
 CATEGORIES = {"Benign": 0, "Healthy": 1, "OPMD": 2, "OCA": 3}
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def _load_rows(csv_path):
