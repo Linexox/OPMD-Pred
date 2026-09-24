@@ -4,6 +4,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 from loguru import logger
+from tqdm import tqdm
 
 from opmd_pred.data.zenodo import CATEGORIES, ZenodoImageDataset, split_by_patient
 from opmd_pred.model.vit import ZenodoViTClassifier
@@ -19,20 +20,23 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--trainable-blocks", type=int, default=2)
+    parser.add_argument("--num-workers", type=int, default=8)
+    parser.add_argument("--cache", default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--random-init", action="store_true")
     return parser.parse_args()
 
 
-def run_epoch(model, loader, optimizer, device, class_weights):
+def run_epoch(model, loader, optimizer, device, class_weights, desc):
     training = optimizer is not None
     model.train(training)
     total_loss = 0.0
     total_correct = 0
     total_count = 0
-    for batch in loader:
-        image = batch["image"].to(device)
-        label = batch["label"].to(device)
+    progress = tqdm(loader, desc=desc, unit="batch")
+    for batch in progress:
+        image = batch["image"].to(device, non_blocking=True)
+        label = batch["label"].to(device, non_blocking=True)
         logits = model(image)
         loss = torch.nn.functional.cross_entropy(logits, label, weight=class_weights)
         if training:
@@ -42,6 +46,7 @@ def run_epoch(model, loader, optimizer, device, class_weights):
         total_loss += loss.item() * label.size(0)
         total_correct += (logits.argmax(1) == label).sum().item()
         total_count += label.size(0)
+        progress.set_postfix(loss=f"{loss.item():.4f}")
     return total_loss / total_count, total_correct / total_count
 
 
@@ -52,12 +57,19 @@ def main():
     configure_logger(output)
     device = torch.device(device_name())
     train_indices, validation_indices, test_indices = split_by_patient(args.csv, seed=args.seed)
-    train_set = ZenodoImageDataset(args.csv, args.images, train_indices, train=True)
-    validation_set = ZenodoImageDataset(args.csv, args.images, validation_indices, train=False)
-    test_set = ZenodoImageDataset(args.csv, args.images, test_indices, train=False)
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=0)
-    validation_loader = DataLoader(validation_set, batch_size=args.batch_size, num_workers=0)
-    test_loader = DataLoader(test_set, batch_size=args.batch_size, num_workers=0)
+    train_set = ZenodoImageDataset(args.csv, args.images, train_indices, train=True, cache_path=args.cache)
+    validation_set = ZenodoImageDataset(
+        args.csv, args.images, validation_indices, train=False, cache_path=args.cache
+    )
+    test_set = ZenodoImageDataset(args.csv, args.images, test_indices, train=False, cache_path=args.cache)
+    loader_kwargs = {
+        "num_workers": args.num_workers,
+        "pin_memory": device.type == "cuda",
+        "persistent_workers": args.num_workers > 0,
+    }
+    train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, **loader_kwargs)
+    validation_loader = DataLoader(validation_set, batch_size=args.batch_size, **loader_kwargs)
+    test_loader = DataLoader(test_set, batch_size=args.batch_size, **loader_kwargs)
 
     model = ZenodoViTClassifier(
         pretrained=not args.random_init,
@@ -75,10 +87,12 @@ def main():
     )
     best_accuracy = -1.0
     for epoch in range(1, args.epochs + 1):
-        train_loss, train_accuracy = run_epoch(model, train_loader, optimizer, device, class_weights)
+        train_loss, train_accuracy = run_epoch(
+            model, train_loader, optimizer, device, class_weights, f"epoch {epoch}/{args.epochs} train"
+        )
         with torch.no_grad():
             validation_loss, validation_accuracy = run_epoch(
-                model, validation_loader, None, device, class_weights
+                model, validation_loader, None, device, class_weights, f"epoch {epoch}/{args.epochs} val"
             )
         logger.info(
             "epoch={} train_loss={:.4f} train_acc={:.4f} val_loss={:.4f} val_acc={:.4f}",
@@ -101,7 +115,7 @@ def main():
     checkpoint = torch.load(output / "checkpoint.pt", map_location=device)
     model.image_encoder.load_state_dict(checkpoint["image_encoder"])
     with torch.no_grad():
-        test_loss, test_accuracy = run_epoch(model, test_loader, None, device, class_weights)
+        test_loss, test_accuracy = run_epoch(model, test_loader, None, device, class_weights, "test")
     logger.info("test_loss={:.4f} test_acc={:.4f}", test_loss, test_accuracy)
 
 

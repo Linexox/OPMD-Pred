@@ -7,11 +7,12 @@ from PIL import Image, ImageFile
 from torch.utils.data import Dataset
 from loguru import logger
 
-from .transforms import make_image_transform
+from .transforms import make_cached_image_transform, make_image_transform
 
 
 CATEGORIES = {"Benign": 0, "Healthy": 1, "OPMD": 2, "OCA": 3}
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+_CACHE_STORE = {}
 
 
 def _load_rows(csv_path):
@@ -44,10 +45,27 @@ def _attach_patient_ids(rows, patient_ids):
 
 
 class ZenodoImageDataset(Dataset):
-    def __init__(self, csv_path: str | Path, image_root: str | Path, indices=None, train=False):
+    def __init__(
+        self,
+        csv_path: str | Path,
+        image_root: str | Path,
+        indices=None,
+        train=False,
+        cache_path: str | Path | None = None,
+    ):
         rows = _load_rows(csv_path)
         _attach_patient_ids(rows, _patient_ids(csv_path))
         self.rows = rows if indices is None else [rows[index] for index in indices]
+        self.cache = None
+        self.cache_indices = None
+        if cache_path:
+            cache_path = str(Path(cache_path))
+            if cache_path not in _CACHE_STORE:
+                _CACHE_STORE[cache_path] = torch.load(cache_path, map_location="cpu")
+            self.cache = _CACHE_STORE[cache_path]
+            self.cache_indices = self.cache["indices"]
+            self.transform = make_cached_image_transform(train)
+            return
         self.image_root = Path(image_root)
         self.transform = make_image_transform(train)
         self.images = {
@@ -62,7 +80,10 @@ class ZenodoImageDataset(Dataset):
     def __getitem__(self, index):
         row = self.rows[index]
         image_name = row["Image Name"]
-        image = Image.open(self.images[image_name]).convert("RGB")
+        if self.cache is None:
+            image = Image.open(self.images[image_name]).convert("RGB")
+        else:
+            image = self.cache["images"][self.cache_indices[image_name]]
         return {
             "image": self.transform(image),
             "label": torch.tensor(CATEGORIES[row["Category"]], dtype=torch.long),
