@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument("--dimension", type=int, default=256)
     parser.add_argument("--modality-dropout", type=float, default=0.15)
     parser.add_argument("--unfreeze-image-blocks", type=int, default=0)
+    parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -65,11 +66,33 @@ def apply_modality_dropout(batch, probability):
     return batch
 
 
-def metrics(logits, labels):
-    predictions = (logits.sigmoid() > 0.5).sum(dim=1)
+def metrics(predictions, labels, class_count=3):
+    confusion = torch.bincount(
+        labels * class_count + predictions,
+        minlength=class_count * class_count,
+    ).reshape(class_count, class_count).float()
+    support = confusion.sum(dim=1)
+    true_positive = confusion.diag()
+    precision = true_positive / confusion.sum(dim=0).clamp_min(1)
+    recall = true_positive / support.clamp_min(1)
+    f1 = 2 * precision * recall / (precision + recall).clamp_min(1e-8)
+    macro_f1 = f1.mean().item()
+    balanced_accuracy = recall[support > 0].mean().item()
+
+    total = confusion.sum()
+    observed = torch.arange(class_count, dtype=torch.float32)
+    weights = (observed[:, None] - observed[None, :]).square()
+    observed_disagreement = (weights * confusion / total).sum()
+    expected = support[:, None] * confusion.sum(dim=0)[None, :] / total
+    expected_disagreement = (weights * expected / total).sum()
+    qwk = 1.0 - (observed_disagreement / expected_disagreement).item()
     return {
         "mae": (predictions - labels).abs().float().mean().item(),
         "accuracy": (predictions == labels).float().mean().item(),
+        "macro_f1": macro_f1,
+        "balanced_accuracy": balanced_accuracy,
+        "qwk": qwk,
+        "confusion_matrix": confusion.to(torch.long).tolist(),
     }
 
 
@@ -80,6 +103,8 @@ def run_epoch(model, loader, optimizer, device, dropout_probability=0.0):
     total_mae = 0.0
     total_correct = 0
     total_count = 0
+    all_predictions = []
+    all_labels = []
     for batch in loader:
         batch = move_batch(batch, device)
         if training:
@@ -90,13 +115,21 @@ def run_epoch(model, loader, optimizer, device, dropout_probability=0.0):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-        current = metrics(logits.detach(), batch["label"])
+        predictions = (logits.detach().sigmoid() > 0.5).sum(dim=1)
+        current = metrics(predictions, batch["label"])
+        all_predictions.append(predictions.cpu())
+        all_labels.append(batch["label"].cpu())
         count = batch["label"].size(0)
         total_loss += loss.item() * count
         total_mae += current["mae"] * count
         total_correct += current["accuracy"] * count
         total_count += count
-    return total_loss / total_count, total_mae / total_count, total_correct / total_count
+    predictions = torch.cat(all_predictions)
+    labels = torch.cat(all_labels)
+    summary = metrics(predictions, labels)
+    summary["mae"] = total_mae / total_count
+    summary["accuracy"] = total_correct / total_count
+    return total_loss / total_count, summary
 
 
 def main():
@@ -131,32 +164,48 @@ def main():
         lr=args.lr,
         weight_decay=1e-4,
     )
-    best_loss = float("inf")
+    best_accuracy = -1.0
+    stale_epochs = 0
     for epoch in range(1, args.epochs + 1):
-        train_loss, train_mae, train_accuracy = run_epoch(
+        train_loss, train_metrics = run_epoch(
             model, train_loader, optimizer, device, args.modality_dropout
         )
         with torch.no_grad():
-            validation_loss, validation_mae, validation_accuracy = run_epoch(
+            validation_loss, validation_metrics = run_epoch(
                 model, validation_loader, None, device
             )
         logger.info(
-            "epoch={} train_loss={:.4f} train_mae={:.4f} train_acc={:.4f} "
-            "val_loss={:.4f} val_mae={:.4f} val_acc={:.4f}",
+            "epoch={} train_loss={:.4f} train_acc={:.4f} train_macro_f1={:.4f} "
+            "train_bal_acc={:.4f} train_mae={:.4f} train_qwk={:.4f} "
+            "val_loss={:.4f} val_acc={:.4f} val_macro_f1={:.4f} "
+            "val_bal_acc={:.4f} val_mae={:.4f} val_qwk={:.4f} val_cm={}",
             epoch,
             train_loss,
-            train_mae,
-            train_accuracy,
+            train_metrics["accuracy"],
+            train_metrics["macro_f1"],
+            train_metrics["balanced_accuracy"],
+            train_metrics["mae"],
+            train_metrics["qwk"],
             validation_loss,
-            validation_mae,
-            validation_accuracy,
+            validation_metrics["accuracy"],
+            validation_metrics["macro_f1"],
+            validation_metrics["balanced_accuracy"],
+            validation_metrics["mae"],
+            validation_metrics["qwk"],
+            validation_metrics["confusion_matrix"],
         )
-        if validation_loss < best_loss:
-            best_loss = validation_loss
+        if validation_metrics["accuracy"] > best_accuracy:
+            best_accuracy = validation_metrics["accuracy"]
+            stale_epochs = 0
             torch.save(
-                {"model": model.state_dict(), "epoch": epoch, "validation_loss": validation_loss},
+                {"model": model.state_dict(), "epoch": epoch, "validation_accuracy": best_accuracy},
                 output / "checkpoint.pt",
             )
+        else:
+            stale_epochs += 1
+            if stale_epochs >= args.patience:
+                logger.info("early_stop epoch={} best_val_acc={:.4f}", epoch, best_accuracy)
+                break
 
 
 if __name__ == "__main__":
