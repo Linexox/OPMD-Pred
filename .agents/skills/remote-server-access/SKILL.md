@@ -2,7 +2,6 @@
 name: remote-server-access
 description: 为本项目提供公共远程服务器的 SSH 登录、个人目录初始化和安全操作约束；当用户需要连接、准备或在该服务器上操作时使用。
 ---
-
 # 远程服务器访问
 
 按本项目的服务器约定，帮助用户连接公共服务器并在个人目录中完成准备工作。所有远程写入、依赖安装和任务运行都应先确认当前目录位于个人目录 `~/24334067`。
@@ -27,7 +26,7 @@ pwd
 
 ## 初始化脚本
 
-`init.sh` 是个人 Git 身份和 GitHub SSH key 配置的权威入口；当前不再负责 Hugging Face 登录。需要初始化 Git 或认证失效时，在个人目录中找到并运行它：
+`init.sh` 是个人 Git 身份和 GitHub SSH key 配置的权威入口；S需要初始化 Git 或认证失效时，在个人目录中找到并运行它：
 
 ```bash
 cd ~/24334067
@@ -49,7 +48,7 @@ source ./init.sh
 git config --global --get user.name
 git config --get user.email
 git config --get core.sshCommand
-ssh -T -o BatchMode=yes git@github.com
+ssh -T -o BatchMode=yes -o IdentitiesOnly=yes -i ~/24334067/.ssh/lhf-key git@github.com
 ```
 
 若检查命令输出令牌、私有信息或异常内容，不要复制到聊天、日志或仓库中。

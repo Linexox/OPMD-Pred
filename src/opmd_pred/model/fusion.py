@@ -22,17 +22,15 @@ class MultimodalFusion(nn.Module):
 
     def __init__(self, dimension=256, pretrained_image=True, tct_categories=8):
         super().__init__()
-        self.image_encoder = ImageEncoder(pretrained=pretrained_image)
-        self.image_projection = nn.Linear(self.image_encoder.output_dim, dimension)
-        self.demo_encoder = NumericEncoder(2, dimension)
-        self.history_encoder = NumericEncoder(9, dimension)
-        self.dna_encoder = NumericEncoder(1, dimension)
+        self.image_encoder       = ImageEncoder(pretrained=pretrained_image)
+        self.image_projection    = nn.Linear(self.image_encoder.output_dim, dimension)
+        self.demo_encoder        = NumericEncoder(2, dimension)
+        self.history_encoder     = NumericEncoder(9, dimension)
+        self.dna_encoder         = NumericEncoder(1, dimension)
         self.methylation_encoder = NumericEncoder(1, dimension)
-        self.tct_encoder = nn.Embedding(tct_categories + 1, dimension)
-        self.missing_tokens = nn.ParameterDict(
-            {name: nn.Parameter(torch.randn(dimension) * 0.02) for name in self.names}
-        )
-        self.cls_token = nn.Parameter(torch.zeros(dimension))
+        self.tct_encoder         = nn.Embedding(tct_categories + 1, dimension)
+        self.missing_tokens      = nn.ParameterDict({name: nn.Parameter(torch.randn(dimension) * 0.02) for name in self.names})
+        self.cls_token           = nn.Parameter(torch.zeros(dimension))
         layer = nn.TransformerEncoderLayer(
             d_model=dimension,
             nhead=4,
