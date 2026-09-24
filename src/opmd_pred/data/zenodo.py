@@ -5,11 +5,29 @@ from pathlib import Path
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
+from loguru import logger
 
 from .transforms import make_image_transform
 
 
 CATEGORIES = {"Benign": 0, "Healthy": 1, "OPMD": 2, "OCA": 3}
+
+
+def _load_rows(csv_path):
+    with Path(csv_path).open(encoding="utf-8-sig", newline="") as file:
+        rows = list(csv.DictReader(file))
+    valid_rows = []
+    skipped = 0
+    for row in rows:
+        category = row["Category"].strip()
+        if category not in CATEGORIES:
+            skipped += 1
+            continue
+        row["Category"] = category
+        valid_rows.append(row)
+    if skipped:
+        logger.warning("Skipped {} Zenodo rows with missing or unknown Category", skipped)
+    return valid_rows
 
 
 def _patient_ids(csv_path):
@@ -26,8 +44,7 @@ def _attach_patient_ids(rows, patient_ids):
 
 class ZenodoImageDataset(Dataset):
     def __init__(self, csv_path: str | Path, image_root: str | Path, indices=None, train=False):
-        with Path(csv_path).open(encoding="utf-8-sig", newline="") as file:
-            rows = list(csv.DictReader(file))
+        rows = _load_rows(csv_path)
         _attach_patient_ids(rows, _patient_ids(csv_path))
         self.rows = rows if indices is None else [rows[index] for index in indices]
         self.image_root = Path(image_root)
@@ -53,8 +70,7 @@ class ZenodoImageDataset(Dataset):
 
 
 def split_by_patient(csv_path: str | Path, validation_fraction=0.1, test_fraction=0.1, seed=42):
-    with Path(csv_path).open(encoding="utf-8-sig", newline="") as file:
-        rows = list(csv.DictReader(file))
+    rows = _load_rows(csv_path)
     _attach_patient_ids(rows, _patient_ids(csv_path))
     patients = sorted({row["Patient ID"] for row in rows})
     random.Random(seed).shuffle(patients)
