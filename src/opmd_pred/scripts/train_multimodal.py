@@ -20,9 +20,11 @@ def parse_args():
     parser.add_argument("--output", default="outputs/sysu_multimodal")
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--dimension", type=int, default=256)
     parser.add_argument("--modality-dropout", type=float, default=0.15)
+    parser.add_argument("--dropout-mode", choices=["bernoulli", "subset"], default="bernoulli")
     parser.add_argument("--unfreeze-image-blocks", type=int, default=0)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
@@ -36,7 +38,7 @@ def move_batch(batch, device):
     }
 
 
-def apply_modality_dropout(batch, probability):
+def apply_modality_dropout(batch, probability, mode="bernoulli"):
     if probability == 0:
         return batch
     names = ["image", "demo", "history", "tct", "dna", "methylation"]
@@ -51,7 +53,15 @@ def apply_modality_dropout(batch, probability):
         ],
         dim=1,
     )
-    dropped = present & (torch.rand_like(present.float()) < probability)
+    if mode == "subset":
+        dropped = present.clone()
+        for row in range(present.size(0)):
+            available = present[row].nonzero().flatten()
+            keep_count = torch.randint(1, available.numel() + 1, (1,)).item()
+            keep = available[torch.randperm(available.numel())[:keep_count]]
+            dropped[row, keep] = False
+    else:
+        dropped = present & (torch.rand_like(present.float()) < probability)
     remaining = present & ~dropped
     for row in range(present.size(0)):
         if not remaining[row].any() and present[row].any():
@@ -80,7 +90,7 @@ def metrics(predictions, labels, class_count=3):
     balanced_accuracy = recall[support > 0].mean().item()
 
     total = confusion.sum()
-    observed = torch.arange(class_count, dtype=torch.float32)
+    observed = torch.arange(class_count, device=confusion.device, dtype=torch.float32)
     weights = (observed[:, None] - observed[None, :]).square()
     observed_disagreement = (weights * confusion / total).sum()
     expected = support[:, None] * confusion.sum(dim=0)[None, :] / total
@@ -96,7 +106,7 @@ def metrics(predictions, labels, class_count=3):
     }
 
 
-def run_epoch(model, loader, optimizer, device, dropout_probability=0.0):
+def run_epoch(model, loader, optimizer, device, dropout_probability=0.0, dropout_mode="bernoulli"):
     training = optimizer is not None
     model.train(training)
     total_loss = 0.0
@@ -108,7 +118,7 @@ def run_epoch(model, loader, optimizer, device, dropout_probability=0.0):
     for batch in loader:
         batch = move_batch(batch, device)
         if training:
-            batch = apply_modality_dropout(batch, dropout_probability)
+            batch = apply_modality_dropout(batch, dropout_probability, dropout_mode)
         logits = model(batch)
         loss = ordinal_loss(logits, batch["label"])
         if training:
@@ -142,8 +152,15 @@ def main():
     train_records, validation_records = split_sysu_records(records, seed=args.seed)
     train_set = SysuDataset(train_records, args.images, train=True)
     validation_set = SysuDataset(validation_records, args.images, train=False)
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=0)
-    validation_loader = DataLoader(validation_set, batch_size=args.batch_size, num_workers=0)
+    loader_options = {
+        "batch_size": args.batch_size,
+        "num_workers": args.num_workers,
+        "pin_memory": device.type == "cuda",
+    }
+    if args.num_workers > 0:
+        loader_options["persistent_workers"] = True
+    train_loader = DataLoader(train_set, shuffle=True, **loader_options)
+    validation_loader = DataLoader(validation_set, **loader_options)
     model = MultimodalOrdinalModel(
         dimension=args.dimension,
         pretrained_image=not bool(args.image_checkpoint),
@@ -168,7 +185,7 @@ def main():
     stale_epochs = 0
     for epoch in range(1, args.epochs + 1):
         train_loss, train_metrics = run_epoch(
-            model, train_loader, optimizer, device, args.modality_dropout
+            model, train_loader, optimizer, device, args.modality_dropout, args.dropout_mode
         )
         with torch.no_grad():
             validation_loss, validation_metrics = run_epoch(
@@ -198,7 +215,14 @@ def main():
             best_accuracy = validation_metrics["accuracy"]
             stale_epochs = 0
             torch.save(
-                {"model": model.state_dict(), "epoch": epoch, "validation_accuracy": best_accuracy},
+                {
+                    "model": model.state_dict(),
+                    "epoch": epoch,
+                    "validation_accuracy": best_accuracy,
+                    "config": vars(args),
+                    "validation_sample_ids": [record.sample_id for record in validation_records],
+                    "modality_names": list(model.fusion.names),
+                },
                 output / "checkpoint.pt",
             )
         else:

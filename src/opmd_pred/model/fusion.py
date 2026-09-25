@@ -65,6 +65,9 @@ class MultimodalFusion(nn.Module):
 
     def forward(self, batch):
         embeddings, present = self.modality_embeddings(batch)
+        return self.fuse_embeddings(embeddings, present)
+
+    def fuse_embeddings(self, embeddings, present):
         tokens = []
         for name in self.names:
             missing = self.missing_tokens[name].expand_as(embeddings[name])
@@ -110,3 +113,7 @@ class MultimodalOrdinalModel(nn.Module):
 
     def forward(self, batch):
         return self.ordinal_head(self.fusion(batch))
+
+    def forward_from_embeddings(self, embeddings, present):
+        features = self.fusion.fuse_embeddings(embeddings, present)
+        return self.ordinal_head(features)
