@@ -2,9 +2,13 @@ import torch
 import torch.nn.functional as F
 
 
-def ordinal_loss(logits, labels):
+def ordinal_loss(logits, labels, sample_weight=None):
     thresholds = torch.stack([labels > 0, labels > 1], dim=1).float()
-    return F.binary_cross_entropy_with_logits(logits, thresholds)
+    loss = F.binary_cross_entropy_with_logits(logits, thresholds, reduction="none")
+    loss = loss.mean(dim=1)
+    if sample_weight is not None:
+        loss = loss * sample_weight
+    return loss.mean()
 
 
 def info_nce_loss(first, second, temperature=0.1):

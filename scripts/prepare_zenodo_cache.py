@@ -16,6 +16,7 @@ def parse_args():
     parser.add_argument("--images", default="data/zenodo/Images")
     parser.add_argument("--output", default="outputs/zenodo_cache.pt")
     parser.add_argument("--num-workers", type=int, default=8)
+    parser.add_argument("--size", type=int, default=224)
     return parser.parse_args()
 
 
@@ -28,7 +29,7 @@ def main():
         for path in Path(args.images).rglob("*")
         if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
     }
-    resize = Resize((224, 224))
+    resize = Resize((args.size, args.size))
     to_tensor = PILToTensor()
     image_names = [row["Image Name"] for row in rows]
 

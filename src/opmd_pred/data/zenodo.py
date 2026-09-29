@@ -52,6 +52,7 @@ class ZenodoImageDataset(Dataset):
         indices=None,
         train=False,
         cache_path: str | Path | None = None,
+        crop_size: int = 224,
     ):
         rows = _load_rows(csv_path)
         _attach_patient_ids(rows, _patient_ids(csv_path))
@@ -64,7 +65,7 @@ class ZenodoImageDataset(Dataset):
                 _CACHE_STORE[cache_path] = torch.load(cache_path, map_location="cpu")
             self.cache = _CACHE_STORE[cache_path]
             self.cache_indices = self.cache["indices"]
-            self.transform = make_cached_image_transform(train)
+            self.transform = make_cached_image_transform(train, crop_size)
             return
         self.image_root = Path(image_root)
         self.transform = make_image_transform(train)
@@ -105,3 +106,23 @@ def split_by_patient(csv_path: str | Path, validation_fraction=0.1, test_fractio
     validation = [index for index, row in enumerate(rows) if row["Patient ID"] in validation_patients]
     test = [index for index, row in enumerate(rows) if row["Patient ID"] in test_patients]
     return train, validation, test
+
+
+def split_stratified(csv_path: str | Path, validation_fraction=0.1, test_fraction=0.1, seed=42):
+    rows = _load_rows(csv_path)
+    by_category = {}
+    for index, row in enumerate(rows):
+        by_category.setdefault(row["Category"], []).append(index)
+    generator = random.Random(seed)
+    train = []
+    validation = []
+    test = []
+    for category in sorted(by_category):
+        indices = sorted(by_category[category])
+        generator.shuffle(indices)
+        test_count = round(len(indices) * test_fraction)
+        validation_count = round(len(indices) * validation_fraction)
+        test.extend(indices[:test_count])
+        validation.extend(indices[test_count : test_count + validation_count])
+        train.extend(indices[test_count + validation_count :])
+    return sorted(train), sorted(validation), sorted(test)

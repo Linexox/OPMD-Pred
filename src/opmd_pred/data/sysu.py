@@ -119,6 +119,21 @@ def _value_mask(values: list[float | None], scale: list[float]) -> tuple[torch.T
     return torch.tensor(data, dtype=torch.float32), torch.tensor(mask, dtype=torch.float32)
 
 
+def _log_value_mask(
+    values: list[float | None], epsilon: float = 1e-6, scale: float = 6.0
+) -> tuple[torch.Tensor, torch.Tensor]:
+    data = []
+    mask = []
+    for value in values:
+        if value is None:
+            data.append(0.0)
+            mask.append(0.0)
+        else:
+            data.append(math.log10(value + epsilon) / scale)
+            mask.append(1.0)
+    return torch.tensor(data, dtype=torch.float32), torch.tensor(mask, dtype=torch.float32)
+
+
 class SysuDataset(Dataset):
     def __init__(self, records, image_root: str | Path, train: bool = False):
         self.records = records
@@ -145,7 +160,7 @@ class SysuDataset(Dataset):
             ],
             [1.0, 50.0, 100.0, 1.0, 50.0, 1000.0, 1.0, 20.0, 50.0],
         )
-        dna, dna_mask = _value_mask([record.dna], [1.0])
+        dna, dna_mask = _log_value_mask([record.dna])
         methylation, methylation_mask = _value_mask([record.methylation], [10.0])
 
         image_present = bool(record.image_path)
