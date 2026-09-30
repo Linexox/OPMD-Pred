@@ -29,6 +29,7 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--tta", choices=["none", "hflip"], default="hflip")
+    parser.add_argument("--agg", choices=["prob", "logit"], default="prob")
     return parser.parse_args()
 
 
@@ -72,7 +73,7 @@ def main():
         model.eval()
         models.append(model)
 
-    model_probabilities = []
+    model_outputs = []
     label_batches = []
     for model_index, model in enumerate(models):
         batches = []
@@ -80,16 +81,20 @@ def main():
         for batch in progress:
             image = batch["image"].to(device, non_blocking=True)
             with torch.no_grad():
-                probability = model(image).softmax(dim=1)
+                output = model(image)
                 if args.tta == "hflip":
                     flipped = torch.flip(image, dims=[3])
-                    probability = probability + model(flipped).softmax(dim=1)
-            batches.append(probability.cpu())
+                    output = output + model(flipped)
+            batches.append(output.cpu())
             if model_index == 0:
                 label_batches.append(batch["label"])
-        model_probabilities.append(torch.cat(batches))
+        model_outputs.append(torch.cat(batches))
 
     labels = torch.cat(label_batches)
+    if args.agg == "prob":
+        model_probabilities = [torch.nn.functional.softmax(output, dim=1) for output in model_outputs]
+    else:
+        model_probabilities = model_outputs
     class_names = [name for name, _ in sorted(CATEGORIES.items(), key=lambda item: item[1])]
     ensemble_probability = torch.stack(model_probabilities).mean(dim=0)
 
