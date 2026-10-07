@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 from importlib.metadata import version
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from opmd_pred.analysis.evaluation import classification_metrics
 from opmd_pred.data.sysu import MODALITIES, SysuDataset, assign_tct_ids, build_tct_vocab
 from opmd_pred.data.sysu_protocol import PROTOCOL, file_sha256, load_manifest, manifest_digest, select_records, split_coverage
 from opmd_pred.model.fusion import MultimodalOrdinalModel
-from opmd_pred.model.losses import ordinal_loss
+from opmd_pred.model.losses import observed_subset_consistency, ordinal_loss
 from opmd_pred.model.ordinal import model_probabilities, probability_decision
 from opmd_pred.scripts.common import set_seed
 from opmd_pred.scripts.train_multimodal import apply_modality_dropout, move_batch
@@ -43,6 +44,9 @@ def parse_args():
     parser.add_argument("--dimension", type=int, default=128)
     parser.add_argument("--modality-dropout", type=float, default=0.15)
     parser.add_argument("--dropout-mode", choices=["bernoulli", "subset"], default="bernoulli")
+    parser.add_argument("--subset-weight", type=float, default=0.0, help="a for supervised nonempty observed subset; zero preserves baseline")
+    parser.add_argument("--consistency-weight", type=float, default=0.0, help="b for detached observed-teacher to subset-student matching")
+    parser.add_argument("--consistency-type", choices=["cdf_mse", "forward_kl"], default="cdf_mse")
     parser.add_argument("--unfreeze-image-blocks", type=int, default=0)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
@@ -56,6 +60,8 @@ def parse_args():
         parser.error("Use positive epochs/batch-size/patience/lr and nonnegative num-workers")
     if args.dimension < 4 or args.dimension % 4 or not 0 <= args.modality_dropout <= 1:
         parser.error("Dimension must be divisible by 4; modality-dropout must be in [0,1]")
+    if any(not math.isfinite(weight) or weight < 0 for weight in (args.subset_weight, args.consistency_weight)):
+        parser.error("Subset and consistency weights must be finite and nonnegative")
     return args
 
 
@@ -99,25 +105,7 @@ def make_loader(records, images, config, batch_size, workers, device, training=F
                       num_workers=workers, pin_memory=device.type == "cuda")
 
 
-def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mode="bernoulli", cost_matrix=None):
-    training = optimizer is not None
-    model.train(training)
-    labels, probabilities, total_loss = [], [], 0.0
-    for batch in loader:
-        batch = move_batch(batch, device)
-        if training:
-            batch = apply_modality_dropout(batch, probability, dropout_mode, model.fusion.names)
-        with torch.set_grad_enabled(training):
-            logits = model(batch)
-            loss = ordinal_loss(logits, batch["label"]) if model.head_kind == "ordinal" else F.cross_entropy(logits, batch["label"])
-            if training:
-                optimizer.zero_grad(set_to_none=True)
-                loss.backward()
-                optimizer.step()
-        labels.append(batch["label"].detach().cpu())
-        probabilities.append(model_probabilities(logits.detach(), model.head_kind).cpu())
-        total_loss += loss.item() * batch["label"].numel()
-    labels, probabilities = torch.cat(labels), torch.cat(probabilities)
+def summarize_probabilities(probabilities, labels, cost_matrix=None):
     argmax = probability_decision(probabilities)
     summary = classification_metrics(argmax, labels)
     if cost_matrix is not None:
@@ -127,6 +115,62 @@ def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mo
         cost_summary["mean_cost"] = costs[labels, decisions].mean().item()
         summary["cost_decision"] = cost_summary
         summary["argmax_mean_cost"] = costs[labels, argmax].mean().item()
+    return summary
+
+
+def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mode="bernoulli", cost_matrix=None,
+              subset_weight=0.0, consistency_weight=0.0, consistency_type="cdf_mse"):
+    training = optimizer is not None
+    model.train(training)
+    labels, probabilities, total_loss = [], [], 0.0
+    dual_view = training and (subset_weight > 0 or consistency_weight > 0)
+    subset_probabilities, mask_trace = [], []
+    component_losses = {"observed_supervised": 0.0, "subset_supervised": 0.0, "consistency": 0.0}
+    for batch in loader:
+        batch = move_batch(batch, device)
+        if training and not dual_view:
+            batch = apply_modality_dropout(batch, probability, dropout_mode, model.fusion.names)
+        with torch.set_grad_enabled(training):
+            if dual_view:
+                embeddings, observed = model.fusion.modality_embeddings(batch)
+                subset_batch = apply_modality_dropout(batch, probability, dropout_mode, model.fusion.names)
+                subset = {name: subset_batch[f"{name}_present"].bool() if name in {"image", "tct"}
+                          else subset_batch[f"{name}_mask"].any(dim=1) for name in model.fusion.names}
+                logits = model.forward_from_embeddings(embeddings, observed)
+                subset_logits = model.forward_from_embeddings(embeddings, subset)
+            else:
+                logits = model(batch)
+            loss = ordinal_loss(logits, batch["label"]) if model.head_kind == "ordinal" else F.cross_entropy(logits, batch["label"])
+            if dual_view:
+                observed_loss = loss
+                subset_loss = ordinal_loss(subset_logits, batch["label"]) if model.head_kind == "ordinal" else F.cross_entropy(subset_logits, batch["label"])
+                p_observed = model_probabilities(logits, model.head_kind)
+                p_subset = model_probabilities(subset_logits, model.head_kind)
+                consistency_loss = observed_subset_consistency(p_observed, p_subset, consistency_type) if consistency_weight else logits.new_zeros(())
+                loss = observed_loss + subset_weight * subset_loss + consistency_weight * consistency_loss
+                count = batch["label"].numel()
+                for name, value in zip(component_losses, (observed_loss, subset_loss, consistency_loss)):
+                    component_losses[name] += value.detach().item() * count
+                subset_probabilities.append(p_subset.detach().cpu())
+                observed_mask = torch.stack([observed[name] for name in model.fusion.names], dim=1).cpu().tolist()
+                subset_mask = torch.stack([subset[name] for name in model.fusion.names], dim=1).cpu().tolist()
+                mask_trace.extend({"sample_id": sample_id, "observed_mask": original, "subset_mask": retained}
+                                  for sample_id, original, retained in zip(batch["sample_id"], observed_mask, subset_mask))
+            if training:
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
+        labels.append(batch["label"].detach().cpu())
+        probabilities.append(model_probabilities(logits.detach(), model.head_kind).cpu())
+        total_loss += loss.item() * batch["label"].numel()
+    labels, probabilities = torch.cat(labels), torch.cat(probabilities)
+    summary = summarize_probabilities(probabilities, labels, cost_matrix)
+    if dual_view:
+        summary["observed_view"] = dict(summary)
+        summary["subset_view"] = summarize_probabilities(torch.cat(subset_probabilities), labels, cost_matrix)
+        summary["component_losses"] = {name: value / labels.numel() for name, value in component_losses.items()}
+        summary["view_mask_names"] = list(model.fusion.names)
+        summary["view_mask_trace"] = mask_trace
     summary["loss"] = total_loss / labels.numel()
     return summary, labels, probabilities
 
@@ -166,6 +210,12 @@ def main():
     tct_vocab = build_tct_vocab(splits["train"])
     assign_tct_ids(records, tct_vocab)
     cost_matrix = read_cost_matrix(args.cost_matrix)
+    view_recipe = {"subset_weight": args.subset_weight, "consistency_weight": args.consistency_weight,
+                   "consistency_type": args.consistency_type, "teacher_stop_gradient": True,
+                   "view_logic": "O=actual observed; S=nonempty dropout subset of O; same augmented tensor and shared embeddings",
+                   "enabled": args.subset_weight > 0 or args.consistency_weight > 0,
+                   "validation_test": "single actual-observed forward; no simulated dropout or teacher"}
+    view_recipe["training_primary_view"] = "actual_observed_O" if view_recipe["enabled"] else "baseline_single_dropout_view"
     config = {"dimension": args.dimension, "tct_categories": max(tct_vocab.values(), default=1),
               "image_encoder": args.image_encoder, "modalities": args.modalities,
               "fusion": args.fusion, "head": args.head}
@@ -194,14 +244,18 @@ def main():
     write_json(output / "split_manifest.json", manifest)
     write_json(output / "config.json", {**vars(args), "model_config": config, "tct_vocab": tct_vocab,
                                         "tct_special_ids": {"missing": 0, "unknown_observed": 1},
-                                        "cost_matrix": cost_matrix, "effective_split_ids": effective_ids, "excluded": excluded,
+                                        "cost_matrix": cost_matrix, "view_recipe": view_recipe, "effective_split_ids": effective_ids, "excluded": excluded,
                                         "encoder_source": encoder_source, "split_manifest_sha256": manifest_sha,
                                         "split_manifest_source_sha256": manifest_source_sha, "split_coverage": coverage})
     history, best_key, stale, best_epoch = [], (-1.0, -1.0), 0, None
     for epoch in range(1, args.epochs + 1):
-        train_metrics, _, _ = run_epoch(model, train_loader, device, optimizer, args.modality_dropout, args.dropout_mode, cost_matrix)
+        train_metrics, _, _ = run_epoch(model, train_loader, device, optimizer, args.modality_dropout, args.dropout_mode, cost_matrix,
+                                        args.subset_weight, args.consistency_weight, args.consistency_type)
         val_metrics, _, _ = run_epoch(model, val_loader, device, cost_matrix=cost_matrix)
         add_coverage_metrics(train_metrics, coverage["train"])
+        if "observed_view" in train_metrics:
+            add_coverage_metrics(train_metrics["observed_view"], coverage["train"])
+            add_coverage_metrics(train_metrics["subset_view"], coverage["train"])
         add_coverage_metrics(val_metrics, coverage["val"])
         history.append({"epoch": epoch, "train": train_metrics, "val": val_metrics})
         key = (val_metrics["accuracy_all_assigned"], val_metrics["macro_f1"])
@@ -209,7 +263,7 @@ def main():
             best_key, best_epoch, stale = key, epoch, 0
             torch.save({"format": CHECKPOINT_FORMAT, "model": model.state_dict(), "optimizer": optimizer.state_dict(),
                         "epoch": epoch, "validation_metrics": val_metrics, "selection_rule": "val_argmax_all_assigned_accuracy_then_eligible_macro_f1",
-                        "model_config": config, "training_config": vars(args), "cost_matrix": cost_matrix,
+                        "model_config": config, "training_config": vars(args), "cost_matrix": cost_matrix, "view_recipe": view_recipe,
                         "tct_vocab": tct_vocab, "tct_special_ids": {"missing": 0, "unknown_observed": 1},
                         "split_manifest": manifest, "split_manifest_sha256": manifest_sha,
                         "split_manifest_source_sha256": manifest_source_sha, "split_coverage": coverage,
