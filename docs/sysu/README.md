@@ -16,6 +16,10 @@ SYSU处于数据核对、方法研究和工程基线准备阶段，没有新的�
 - [有序分类、可信预测、解释](D:/.Workspace/医工/OPMD-Pred/docs/sysu/ordinal-trust-explanation-2026-10-08.md)：有序概率、独立成本决策、校准、conformal、IG/ViT解释。
 - [方法主线与基础推导](D:/.Workspace/医工/OPMD-Pred/docs/sysu/method-proposal-2026-10-08.md)：缺失导致的有序概率差、动作风险差与解释连接，明确绝对差一致性的反例和修订。
 - [独立方法复审](D:/.Workspace/医工/OPMD-Pred/docs/sysu/method-review-2026-10-08.md)：已有近似工作、数学边界与可证伪路线。
+- [工程基线与指令](D:/.Workspace/医工/OPMD-Pred/docs/sysu/foundation-implementation.md)：五模态、DINO、患者manifest、完整checkpoint、覆盖率/距离错误指标、SHAP/InterSHAP入口。
+- [独立静态代码审阅](D:/.Workspace/医工/OPMD-Pred/docs/sysu/foundation-static-review-2026-10-08.md)：实现结构与未验证边界。
+
+工程分支`codex/sysu-foundation`，本地隔离worktree为`C:/Users/aljcn/.codex/worktrees/sysu-foundation/OPMD-Pred`。只通过源码静态审阅、Python语法解析及锁文件解析，未安装新依赖、未运行模型功能检查或真实训练。旧含人口学的融合checkpoint不能载入新版，原用户工作目录及已有改动保留。
 
 文献调研是定向实现研究，不是系统综述。基础恒等式不宣称新定理；框架组合不宣称首创。比赛创新需通过患者级真实缺失/模拟遮蔽对照、低估距离指标及解释忠实性证明。
 
