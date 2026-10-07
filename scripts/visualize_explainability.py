@@ -37,7 +37,8 @@ def draw_waterfall(row, names, output):
     order = sorted(range(len(names)), key=lambda index: abs(values[index]), reverse=True)
     labels = [names[index] for index in order]
     ordered_values = [values[index] for index in order]
-    cumulative = [0.0]
+    base_value = float(row["base_value"])
+    cumulative = [base_value]
     for value in ordered_values:
         cumulative.append(cumulative[-1] + value)
 
@@ -100,9 +101,9 @@ def draw_waterfall(row, names, output):
             )
 
     total = cumulative[-1]
-    axis.axvline(0, color="#8b9188", linestyle=(0, (1, 3)), linewidth=1)
+    axis.axvline(base_value, color="#8b9188", linestyle=(0, (1, 3)), linewidth=1)
     axis.axvline(total, color="#8b9188", linestyle=(0, (1, 3)), linewidth=1)
-    axis.text(0, len(labels) + 0.35, "E[f(X)] = 0", ha="center", va="bottom", fontsize=10)
+    axis.text(base_value, len(labels) + 0.35, f"f(empty) = {base_value:.2f}", ha="center", va="bottom", fontsize=10)
     axis.text(total, len(labels) + 0.35, f"f(x) = {total:+.2f}", ha="center", va="bottom", fontsize=10)
     axis.set_yticks(range(len(labels)), labels)
     axis.set_xlabel("Contribution to model output", fontsize=11)
@@ -132,7 +133,7 @@ def draw_interactions(row, names, output):
     image = axis.imshow(matrix, cmap="RdBu_r", vmin=-limit, vmax=limit)
     axis.set_xticks(range(len(names)), names, rotation=35, ha="right")
     axis.set_yticks(range(len(names)), names)
-    axis.set_title(f"Sample {row['sample_index']} InterSHAP")
+    axis.set_title(f"Sample {row['sample_index']} Shapley interactions")
     for first in range(len(names)):
         for second in range(len(names)):
             axis.text(
@@ -156,7 +157,7 @@ def draw_global_interactions(summary, names, output):
     image = axis.imshow(matrix, cmap="YlOrRd")
     axis.set_xticks(range(len(names)), names, rotation=35, ha="right")
     axis.set_yticks(range(len(names)), names)
-    axis.set_title("Mean absolute InterSHAP")
+    axis.set_title("Mean absolute Shapley interactions")
     for first in range(len(names)):
         for second in range(len(names)):
             axis.text(

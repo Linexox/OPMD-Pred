@@ -1,0 +1,185 @@
+{
+  "removed": [
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-AttentionMIL-B0",
+      "branch": "refs/heads/codex/zenodo-attention-mil-b0",
+      "head": "240b27556e6f53c0f1b7287b41232d6a40554715",
+      "remove": true,
+      "bytes": 36618639,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-B0-DINO-Softvote",
+      "branch": "refs/heads/codex/zenodo-b0-dino-softvote",
+      "head": "536dfeb45ac3d44f087cf793a2066c1ef257ce9a",
+      "remove": true,
+      "bytes": 363448216,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-B0-DenseNet-Ensemble",
+      "branch": "refs/heads/codex/zenodo-b0-densenet-softvote",
+      "head": "fa81f22e809db64296ae3d8b77e89a308c1c07ee",
+      "remove": true,
+      "bytes": 136457107,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-B0-Features-SVM",
+      "branch": "refs/heads/codex/zenodo-b0-features-svm",
+      "head": "ec6e2107f1facba1594c0eac6668e558c3615dbd",
+      "remove": true,
+      "bytes": 31470742,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-B0-Seed-Ensemble",
+      "branch": "refs/heads/codex/zenodo-b0-seed-ensemble",
+      "head": "02d5de556028fa4d7316d52c638ea7d9be14fca4",
+      "remove": true,
+      "bytes": 168581652,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-ConvNeXtV2-Tiny",
+      "branch": "refs/heads/codex/zenodo-convnextv2-tiny-224",
+      "head": "dbe83bfd2247386da311a5d569657b838917214b",
+      "remove": true,
+      "bytes": 225097946,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-ConvNeXtV2-Tiny-384",
+      "branch": "refs/heads/codex/zenodo-convnextv2-tiny-384",
+      "head": "fbcab3a5e2ff0ab44de488233f7ac38a4b0983ab",
+      "remove": true,
+      "bytes": 225068688,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-DINOv2-518-Last4",
+      "branch": "refs/heads/codex/zenodo-dinov2-b14-518-last4",
+      "head": "379fda12d1449338fa07dae91967f9114289b277",
+      "remove": true,
+      "bytes": 694766440,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-DINOv2-518-LogReg",
+      "branch": "refs/heads/codex/zenodo-dinov2-b14-518-logreg",
+      "head": "3895dc01fb9b91d8ea8283e9a48c99bbb70481f1",
+      "remove": true,
+      "bytes": 363731874,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-DINOv2-Prior-Correction",
+      "branch": "refs/heads/codex/zenodo-dinov2-prior-correction",
+      "head": "fce84b61988720871a2b2b1671094093b5e32f15",
+      "remove": true,
+      "bytes": 349125,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-DenseNet169",
+      "branch": "refs/heads/codex/zenodo-densenet169",
+      "head": "1d69672ac8b86105317b0254432c293554f32fd6",
+      "remove": true,
+      "bytes": 103828544,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-EfficientNetB0-480",
+      "branch": "refs/heads/codex/zenodo-efficientnet-b0-480",
+      "head": "67370b47b2a6ad153708d2ac47b30dae5d53affd",
+      "remove": true,
+      "bytes": 2107573458,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-EfficientNetB0-DA",
+      "branch": "refs/heads/codex/zenodo-efficientnet-b0-minority-da",
+      "head": "f21c63529c7941154cac2997c7bb30f4a73c67e9",
+      "remove": true,
+      "bytes": 34567062,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-EfficientNetB0-L2SP",
+      "branch": "refs/heads/codex/zenodo-b0-l2sp-480",
+      "head": "7564abfae204519a626caa3dee796319e42ee212",
+      "remove": true,
+      "bytes": 100646071,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-EfficientNetB0-Staged",
+      "branch": "refs/heads/codex/zenodo-efficientnet-b0-staged",
+      "head": "a3e06ca2fb936e4ee7fa91fdb57da9aad60c3399",
+      "remove": true,
+      "bytes": 34646395,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-EfficientNetB0-WeightedCE",
+      "branch": "refs/heads/codex/zenodo-b0-weighted-ce-480",
+      "head": "45e981cf2ef8e89fc02e8b9a7694e276e5481aec",
+      "remove": true,
+      "bytes": 34567216,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-EfficientNetB4-480",
+      "branch": "refs/heads/codex/zenodo-efficientnet-b4-480",
+      "head": "56135daad9c74134c7b95c3f9cb5ab6650716ff0",
+      "remove": true,
+      "bytes": 143807681,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-EfficientNetV2S-480",
+      "branch": "refs/heads/codex/zenodo-efficientnet-v2-s-480",
+      "head": "40884fd313fdf5e97fbd47dc1b77b80c2709d3bb",
+      "remove": true,
+      "bytes": 165132173,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-ResNet50",
+      "branch": "refs/heads/codex/zenodo-resnet50",
+      "head": "5e3fb95fc6b1e88361de318198dd98af97158e99",
+      "remove": true,
+      "bytes": 190682575,
+      "dirty": ""
+    },
+    {
+      "path": "/home/zjkj/24334067/OPMD-Pred-Zenodo-WSDAN",
+      "branch": "refs/heads/codex/zenodo-wsdan-b0",
+      "head": "a2ae4f62c997c31f7f8b0b59c6d60519a8217ce4",
+      "remove": true,
+      "bytes": 35043249,
+      "dirty": ""
+    }
+  ],
+  "cache_removed": [
+    {
+      "path": "/home/zjkj/24334067/zenodo-cache/convnextv2_tiny_letterbox_224_uint8.pt",
+      "bytes": 451496877
+    },
+    {
+      "path": "/home/zjkj/24334067/zenodo-cache/convnextv2_tiny_letterbox_384_uint8.pt",
+      "bytes": 1326725037
+    }
+  ],
+  "archive": "/home/zjkj/24334067/archives/zenodo-pretraining-20261008",
+  "removed_bytes": 6974306767,
+  "remaining_worktrees": "worktree /home/zjkj/24334067/OPMD-Pred\nHEAD 0b208b5069f23fc78e2f13d4f4c1167b34678292\nbranch refs/heads/Yanwei\n\nworktree /home/zjkj/24334067/OPMD-Pred-ViT-Pretrain\nHEAD 8518b14c513daae45235e29c8b5c2ad6418ef325\nbranch refs/heads/ViT-Pretrain\n\nworktree /home/zjkj/24334067/OPMD-Pred-Zenodo-DINOv2-Last4-SAM\nHEAD a3324c8619ae830c66ab3fc87a059b9b941bd0b7\nbranch refs/heads/codex/zenodo-dinov2-last4-sam\n\nworktree /home/zjkj/24334067/OPMD-Pred-Zenodo-Protocol\nHEAD dd8f9f84a3be3dab67dabd59c0ca6ea0277cfb1a\nbranch refs/heads/codex/zenodo-protocol\n\n",
+  "remaining_zenodo_branches": [
+    "refs/heads/codex/zenodo-dinov2-last4-sam",
+    "refs/heads/codex/zenodo-protocol"
+  ],
+  "retained_sha256": {
+    "/home/zjkj/24334067/OPMD-Pred-Zenodo-DINOv2-Last4-SAM/outputs/zenodo_dinov2_b14_518_last4_sam_seed42/checkpoint.pt": "2ea7daf27541571a6c2163c28d861fd3cb53998bc881eaba0288432424b9a838",
+    "/home/zjkj/24334067/OPMD-Pred-ViT-Pretrain/outputs/zenodo_transfer/dinov2_last4_sam_epoch16_encoder.pt": "58a3fcc724155c8ecfc7bf0e955b2bf022f0e2aa4bfed06a51a5b99c850a4a65"
+  }
+}

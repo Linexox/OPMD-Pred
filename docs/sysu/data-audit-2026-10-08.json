@@ -1,0 +1,812 @@
+{
+  "audit_type": "aggregate_read_only_not_model_evaluation",
+  "date": "2026-10-08",
+  "csv_sha256": "c85753ac50a28139470e51cc01da089c5e36e9ca60c1c2b4aff6b40782e62f79",
+  "record_count": 139,
+  "unique_sample_ids": 139,
+  "true_patient_count": null,
+  "patient_id_available_in_processed": false,
+  "field_counts": {
+    "image_path": {
+      "observed": 87,
+      "missing": 52
+    },
+    "sex": {
+      "observed": 139,
+      "missing": 0
+    },
+    "age": {
+      "observed": 133,
+      "missing": 6
+    },
+    "是否吸烟": {
+      "observed": 69,
+      "missing": 70
+    },
+    "吸烟年限（年）": {
+      "observed": 22,
+      "missing": 117
+    },
+    "吸烟量（支/天）": {
+      "observed": 22,
+      "missing": 117
+    },
+    "是否饮酒": {
+      "observed": 69,
+      "missing": 70
+    },
+    "饮酒年限(年)": {
+      "observed": 14,
+      "missing": 125
+    },
+    "饮酒量(ml/天)": {
+      "observed": 14,
+      "missing": 125
+    },
+    "是否嚼槟榔": {
+      "observed": 69,
+      "missing": 70
+    },
+    "嚼槟榔年限(年)": {
+      "observed": 15,
+      "missing": 124
+    },
+    "嚼槟榔量（颗/天）": {
+      "observed": 15,
+      "missing": 124
+    },
+    "TCT意见": {
+      "observed": 120,
+      "missing": 19
+    },
+    "DNA倍体分析结果": {
+      "observed": 123,
+      "missing": 16
+    },
+    "甲基化总数": {
+      "observed": 89,
+      "missing": 50
+    }
+  },
+  "images": {
+    "declared": 87,
+    "exists": 87,
+    "readable": 87,
+    "unreadable": 0,
+    "missing_files": 0,
+    "byte_duplicates": {
+      "groups": 2,
+      "records": 4,
+      "extra_records": 2,
+      "cross_label_groups": 2
+    },
+    "decoded_rgb_duplicates": {
+      "groups": 2,
+      "records": 4,
+      "extra_records": 2,
+      "cross_label_groups": 2
+    },
+    "dimensions": {
+      "(1702, 1276)": 2,
+      "(8192, 5464)": 19,
+      "(1276, 1702)": 3,
+      "(693, 528)": 1,
+      "(767, 826)": 1,
+      "(1171, 1078)": 1,
+      "(2588, 2655)": 1,
+      "(2020, 1279)": 1,
+      "(781, 669)": 1,
+      "(762, 540)": 1,
+      "(636, 691)": 1,
+      "(2174, 2253)": 1,
+      "(828, 658)": 1,
+      "(2925, 3245)": 1,
+      "(1046, 900)": 1,
+      "(827, 765)": 1,
+      "(867, 894)": 1,
+      "(271, 241)": 1,
+      "(5472, 3648)": 3,
+      "(2166, 2876)": 1,
+      "(659, 577)": 1,
+      "(1431, 997)": 1,
+      "(521, 547)": 1,
+      "(1228, 1121)": 1,
+      "(1788, 1312)": 1,
+      "(590, 413)": 1,
+      "(685, 683)": 1,
+      "(1713, 1751)": 1,
+      "(700, 934)": 1,
+      "(1128, 1010)": 1,
+      "(699, 867)": 1,
+      "(626, 452)": 1,
+      "(1783, 1572)": 1,
+      "(615, 575)": 1,
+      "(771, 741)": 1,
+      "(1844, 1614)": 1,
+      "(458, 510)": 1,
+      "(5464, 8192)": 1,
+      "(581, 975)": 1,
+      "(697, 420)": 1,
+      "(860, 536)": 1,
+      "(772, 650)": 1,
+      "(1694, 1945)": 1,
+      "(738, 1004)": 1,
+      "(635, 694)": 1,
+      "(846, 811)": 1,
+      "(5808, 3872)": 1,
+      "(701, 647)": 1,
+      "(624, 712)": 1,
+      "(966, 766)": 1,
+      "(547, 511)": 1,
+      "(922, 847)": 1,
+      "(609, 510)": 1,
+      "(4032, 3024)": 1,
+      "(1172, 761)": 1,
+      "(1051, 825)": 1,
+      "(916, 519)": 1,
+      "(2498, 2469)": 1,
+      "(1934, 982)": 1,
+      "(725, 827)": 1,
+      "(600, 800)": 1,
+      "(3117, 2159)": 1,
+      "(1276, 1276)": 1,
+      "(622, 745)": 1
+    },
+    "duplicate_label_combinations": {
+      "level1_mild_or_normal + level2_moderate": 2
+    }
+  },
+  "numeric_modality_summary": {
+    "DNA倍体分析结果": {
+      "level1_mild_or_normal": {
+        "observed": 55,
+        "min": 0.0,
+        "max": 0.0185185185185185,
+        "median": 0.0,
+        "zero_count": 28
+      },
+      "level2_moderate": {
+        "observed": 32,
+        "min": 0.0,
+        "max": 0.00482954545454545,
+        "median": 2.225068660692225e-05,
+        "zero_count": 15
+      },
+      "level3_severe": {
+        "observed": 36,
+        "min": 0.0,
+        "max": 0.0531504111207014,
+        "median": 0.001144458411900275,
+        "zero_count": 5
+      }
+    },
+    "甲基化总数": {
+      "level1_mild_or_normal": {
+        "observed": 43,
+        "min": 0.0,
+        "max": 5.0,
+        "median": 1.0,
+        "zero_count": 13
+      },
+      "level2_moderate": {
+        "observed": 21,
+        "min": 0.0,
+        "max": 8.0,
+        "median": 2.0,
+        "zero_count": 2
+      },
+      "level3_severe": {
+        "observed": 25,
+        "min": 2.0,
+        "max": 10.0,
+        "median": 5.0,
+        "zero_count": 0
+      }
+    }
+  },
+  "aggregate_tct_categories": {
+    "可疑异型细胞": {
+      "level1_mild_or_normal": 0,
+      "level2_moderate": 2,
+      "level3_severe": 4
+    },
+    "未见异常": {
+      "level1_mild_or_normal": 0,
+      "level2_moderate": 0,
+      "level3_severe": 4
+    },
+    "未见核异质细胞": {
+      "level1_mild_or_normal": 53,
+      "level2_moderate": 25,
+      "level3_severe": 12
+    },
+    "非典型鳞状上皮细胞": {
+      "level1_mild_or_normal": 1,
+      "level2_moderate": 4,
+      "level3_severe": 12
+    },
+    "高度可疑异型细胞": {
+      "level1_mild_or_normal": 0,
+      "level2_moderate": 0,
+      "level3_severe": 3
+    }
+  },
+  "by_class": {
+    "level1_mild_or_normal": {
+      "records": 66,
+      "modalities_observed": {
+        "image": 44,
+        "history": 39,
+        "tct": 54,
+        "dna": 55,
+        "methylation": 43
+      },
+      "patterns_all_non_demographic": {
+        "bit_order": [
+          "image",
+          "history",
+          "tct",
+          "dna",
+          "methylation"
+        ],
+        "counts": {
+          "00000": 3,
+          "00110": 5,
+          "00111": 10,
+          "01111": 4,
+          "10010": 1,
+          "10100": 2,
+          "10110": 4,
+          "10111": 2,
+          "11000": 5,
+          "11001": 1,
+          "11011": 2,
+          "11110": 3,
+          "11111": 24
+        }
+      },
+      "patterns_focus": {
+        "bit_order": [
+          "image",
+          "dna",
+          "methylation"
+        ],
+        "counts": {
+          "000": 3,
+          "010": 5,
+          "011": 14,
+          "100": 7,
+          "101": 1,
+          "110": 8,
+          "111": 28
+        }
+      }
+    },
+    "level2_moderate": {
+      "records": 36,
+      "modalities_observed": {
+        "image": 23,
+        "history": 13,
+        "tct": 31,
+        "dna": 32,
+        "methylation": 21
+      },
+      "patterns_all_non_demographic": {
+        "bit_order": [
+          "image",
+          "history",
+          "tct",
+          "dna",
+          "methylation"
+        ],
+        "counts": {
+          "00000": 2,
+          "00010": 1,
+          "00110": 3,
+          "00111": 5,
+          "01111": 2,
+          "10000": 2,
+          "10110": 6,
+          "10111": 4,
+          "11110": 1,
+          "11111": 10
+        }
+      },
+      "patterns_focus": {
+        "bit_order": [
+          "image",
+          "dna",
+          "methylation"
+        ],
+        "counts": {
+          "000": 2,
+          "010": 4,
+          "011": 7,
+          "100": 2,
+          "110": 7,
+          "111": 14
+        }
+      }
+    },
+    "level3_severe": {
+      "records": 37,
+      "modalities_observed": {
+        "image": 20,
+        "history": 17,
+        "tct": 35,
+        "dna": 36,
+        "methylation": 25
+      },
+      "patterns_all_non_demographic": {
+        "bit_order": [
+          "image",
+          "history",
+          "tct",
+          "dna",
+          "methylation"
+        ],
+        "counts": {
+          "00110": 6,
+          "00111": 7,
+          "01000": 1,
+          "01111": 3,
+          "10110": 4,
+          "10111": 3,
+          "11011": 1,
+          "11110": 1,
+          "11111": 11
+        }
+      },
+      "patterns_focus": {
+        "bit_order": [
+          "image",
+          "dna",
+          "methylation"
+        ],
+        "counts": {
+          "000": 1,
+          "010": 6,
+          "011": 10,
+          "110": 5,
+          "111": 15
+        }
+      }
+    }
+  },
+  "patterns_all_non_demographic": {
+    "bit_order": [
+      "image",
+      "history",
+      "tct",
+      "dna",
+      "methylation"
+    ],
+    "counts": {
+      "00000": 5,
+      "00010": 1,
+      "00110": 14,
+      "00111": 22,
+      "01000": 1,
+      "01111": 9,
+      "10000": 2,
+      "10010": 1,
+      "10100": 2,
+      "10110": 14,
+      "10111": 9,
+      "11000": 5,
+      "11001": 1,
+      "11011": 3,
+      "11110": 5,
+      "11111": 45
+    }
+  },
+  "patterns_focus": {
+    "bit_order": [
+      "image",
+      "dna",
+      "methylation"
+    ],
+    "counts": {
+      "000": 6,
+      "010": 15,
+      "011": 31,
+      "100": 9,
+      "101": 1,
+      "110": 20,
+      "111": 57
+    }
+  },
+  "focus_all_present": 57,
+  "focus_all_missing": 6,
+  "raw_sources": {
+    "level1_mild_or_normal": {
+      "rows": 66,
+      "columns": [
+        "name",
+        "sex",
+        "age",
+        "是否吸烟",
+        "吸烟年限（年）",
+        "吸烟量（支/天）",
+        "是否饮酒",
+        "饮酒年限(年)",
+        "饮酒量(ml/天)",
+        "是否嚼槟榔",
+        "嚼槟榔年限(年)",
+        "嚼槟榔量（颗/天）",
+        "TCT意见",
+        "DNA倍体分析结果",
+        "甲基化总数",
+        "标本满意度",
+        "病原体",
+        "炎细胞",
+        "分析上皮细胞数",
+        "二倍体细胞数量",
+        "四倍体细胞数量",
+        "非整倍体细胞数量",
+        "正常增生或疑似病变细胞",
+        "高倍体细胞数量",
+        "异倍体细胞数量",
+        "DI>=2.3细胞",
+        "DNA倍体分析意见",
+        "",
+        "CDKN2A",
+        "TIMP3",
+        "ZNF582",
+        "TMEFF2",
+        "TFPI2",
+        "SHOX2",
+        "PAX1",
+        "MGMT",
+        "SOX1",
+        "DAPK1"
+      ],
+      "active_sheet": "mild",
+      "xlsx_sha256": "f976ae9090a45ed52c1a00ecd7d86222a651ea4fe64015c81b9e92096e056452",
+      "audited_named_sheet": "mild",
+      "sheet_inventory": [
+        {
+          "name": "mild",
+          "rows": 67,
+          "columns": 38,
+          "known_training_headers": [
+            "sex",
+            "age",
+            "是否吸烟",
+            "吸烟年限（年）",
+            "吸烟量（支/天）",
+            "是否饮酒",
+            "饮酒年限(年)",
+            "饮酒量(ml/天)",
+            "是否嚼槟榔",
+            "嚼槟榔年限(年)",
+            "嚼槟榔量（颗/天）",
+            "TCT意见",
+            "DNA倍体分析结果",
+            "甲基化总数"
+          ],
+          "candidate_identity_headers": [],
+          "date_headers": []
+        }
+      ],
+      "name_observed": 66,
+      "processed_comparison_field_mismatch_counts": {},
+      "gene_observed_counts": {
+        "CDKN2A": 30,
+        "TIMP3": 30,
+        "ZNF582": 30,
+        "TMEFF2": 30,
+        "TFPI2": 30,
+        "SHOX2": 30,
+        "PAX1": 30,
+        "MGMT": 30,
+        "SOX1": 30,
+        "DAPK1": 30
+      },
+      "gene_completeness_counts": {
+        "0": 36,
+        "10": 30
+      },
+      "dna_formula_structure": {
+        "expression": "=ZROW/SROW",
+        "referenced_headers": [
+          "DI>=2.3细胞",
+          "分析上皮细胞数"
+        ]
+      },
+      "folder_linkage": {
+        "zero": 0,
+        "one": 64,
+        "multiple": 2,
+        "prefix_only": 66,
+        "processed_image_byte_match": 44,
+        "processed_image_byte_mismatch": 0
+      },
+      "formula_counts": {
+        "DNA倍体分析结果": 66
+      },
+      "exact_stem_lesion_files": 45,
+      "numbered_stem_lesion_files": 96
+    },
+    "level2_moderate": {
+      "rows": 36,
+      "columns": [
+        "name",
+        "sex",
+        "age",
+        "是否吸烟",
+        "吸烟年限（年）",
+        "吸烟量（支/天）",
+        "是否饮酒",
+        "饮酒年限(年)",
+        "饮酒量(ml/天)",
+        "是否嚼槟榔",
+        "嚼槟榔年限(年)",
+        "嚼槟榔量（颗/天）",
+        "TCT意见",
+        "DNA倍体分析结果",
+        "甲基化总数",
+        "标本满意度",
+        "病原体",
+        "炎细胞",
+        "分析上皮细胞数",
+        "二倍体细胞数量",
+        "四倍体细胞数量",
+        "非整倍体细胞数量",
+        "正常增生或疑似病变细胞",
+        "高倍体细胞数量",
+        "异倍体细胞数量",
+        "DI>=2.3细胞",
+        "DNA倍体分析意见",
+        "CDKN2A",
+        "TIMP3",
+        "ZNF582",
+        "TMEFF2",
+        "TFPI2",
+        "SHOX2",
+        "PAX1",
+        "MGMT",
+        "SOX1",
+        "DAPK1"
+      ],
+      "active_sheet": "Sheet3",
+      "xlsx_sha256": "4144e5773fde674fce13d530296a6d5327900b099aa631ae9c8783a5e1ddb604",
+      "audited_named_sheet": "moderate",
+      "sheet_inventory": [
+        {
+          "name": "moderate",
+          "rows": 37,
+          "columns": 37,
+          "known_training_headers": [
+            "sex",
+            "age",
+            "是否吸烟",
+            "吸烟年限（年）",
+            "吸烟量（支/天）",
+            "是否饮酒",
+            "饮酒年限(年)",
+            "饮酒量(ml/天)",
+            "是否嚼槟榔",
+            "嚼槟榔年限(年)",
+            "嚼槟榔量（颗/天）",
+            "TCT意见",
+            "DNA倍体分析结果",
+            "甲基化总数"
+          ],
+          "candidate_identity_headers": [],
+          "date_headers": []
+        },
+        {
+          "name": "Sheet2",
+          "rows": 11,
+          "columns": 8,
+          "known_training_headers": [],
+          "candidate_identity_headers": [],
+          "date_headers": []
+        },
+        {
+          "name": "Sheet3",
+          "rows": 8,
+          "columns": 15,
+          "known_training_headers": [
+            "sex",
+            "age",
+            "是否吸烟",
+            "吸烟年限（年）",
+            "吸烟量（支/天）",
+            "是否饮酒",
+            "饮酒年限(年)",
+            "饮酒量(ml/天)",
+            "是否嚼槟榔",
+            "嚼槟榔年限(年)",
+            "嚼槟榔量（颗/天）",
+            "TCT意见",
+            "DNA倍体分析结果",
+            "甲基化总数"
+          ],
+          "candidate_identity_headers": [],
+          "date_headers": []
+        }
+      ],
+      "name_observed": 36,
+      "processed_comparison_field_mismatch_counts": {},
+      "gene_observed_counts": {
+        "CDKN2A": 13,
+        "TIMP3": 13,
+        "ZNF582": 13,
+        "TMEFF2": 13,
+        "TFPI2": 13,
+        "SHOX2": 13,
+        "PAX1": 13,
+        "MGMT": 13,
+        "SOX1": 13,
+        "DAPK1": 13
+      },
+      "gene_completeness_counts": {
+        "10": 13,
+        "0": 23
+      },
+      "dna_formula_structure": {
+        "expression": "=ZROW/SROW",
+        "referenced_headers": [
+          "DI>=2.3细胞",
+          "分析上皮细胞数"
+        ]
+      },
+      "folder_linkage": {
+        "zero": 0,
+        "one": 36,
+        "multiple": 0,
+        "prefix_only": 34,
+        "processed_image_byte_match": 23,
+        "processed_image_byte_mismatch": 0
+      },
+      "formula_counts": {
+        "DNA倍体分析结果": 36
+      },
+      "exact_stem_lesion_files": 23,
+      "numbered_stem_lesion_files": 38
+    },
+    "level3_severe": {
+      "rows": 37,
+      "columns": [
+        "name",
+        "sex",
+        "age",
+        "是否吸烟",
+        "吸烟年限（年）",
+        "吸烟量（支/天）",
+        "是否饮酒",
+        "饮酒年限(年)",
+        "饮酒量(ml/天)",
+        "是否嚼槟榔",
+        "嚼槟榔年限(年)",
+        "嚼槟榔量（颗/天）",
+        "TCT意见",
+        "DNA倍体分析结果",
+        "甲基化总数",
+        "标本满意度",
+        "病原体",
+        "炎细胞",
+        "分析上皮细胞数",
+        "二倍体细胞数量",
+        "四倍体细胞数量",
+        "非整倍体细胞数量",
+        "正常增生或疑似病变细胞",
+        "高倍体细胞数量",
+        "异倍体细胞数量",
+        "DI≥2.3细胞",
+        "DNA倍体分析意见",
+        "CDKN2A",
+        "TIMP3",
+        "ZNF582",
+        "TMEFF2",
+        "TFPI2",
+        "SHOX2",
+        "PAX1",
+        "MGMT",
+        "SOX1",
+        "DAPK1"
+      ],
+      "active_sheet": "severe",
+      "xlsx_sha256": "b98b92251075db53c09a18d21b4fef67845cae2198f1911b4a08f3d526c30ee2",
+      "audited_named_sheet": "severe",
+      "sheet_inventory": [
+        {
+          "name": "severe",
+          "rows": 38,
+          "columns": 37,
+          "known_training_headers": [
+            "sex",
+            "age",
+            "是否吸烟",
+            "吸烟年限（年）",
+            "吸烟量（支/天）",
+            "是否饮酒",
+            "饮酒年限(年)",
+            "饮酒量(ml/天)",
+            "是否嚼槟榔",
+            "嚼槟榔年限(年)",
+            "嚼槟榔量（颗/天）",
+            "TCT意见",
+            "DNA倍体分析结果",
+            "甲基化总数"
+          ],
+          "candidate_identity_headers": [],
+          "date_headers": []
+        }
+      ],
+      "name_observed": 37,
+      "processed_comparison_field_mismatch_counts": {},
+      "gene_observed_counts": {
+        "CDKN2A": 19,
+        "TIMP3": 19,
+        "ZNF582": 19,
+        "TMEFF2": 19,
+        "TFPI2": 19,
+        "SHOX2": 19,
+        "PAX1": 19,
+        "MGMT": 19,
+        "SOX1": 19,
+        "DAPK1": 19
+      },
+      "gene_completeness_counts": {
+        "10": 19,
+        "0": 18
+      },
+      "dna_formula_structure": {
+        "expression": "=ZROW/SROW",
+        "referenced_headers": [
+          "DI≥2.3细胞",
+          "分析上皮细胞数"
+        ]
+      },
+      "folder_linkage": {
+        "zero": 0,
+        "one": 35,
+        "multiple": 2,
+        "prefix_only": 35,
+        "processed_image_byte_match": 20,
+        "processed_image_byte_mismatch": 0
+      },
+      "formula_counts": {
+        "DNA倍体分析结果": 37
+      },
+      "exact_stem_lesion_files": 22,
+      "numbered_stem_lesion_files": 41
+    }
+  },
+  "same_normalized_name": {
+    "groups": 8,
+    "records": 16,
+    "extra_records": 8,
+    "cross_label_groups": 7
+  },
+  "distinct_normalized_names_not_confirmed_patients": 131,
+  "exact_tabular_duplicates": {
+    "groups": 4,
+    "records": 8,
+    "extra_records": 4,
+    "cross_label_groups": 2
+  },
+  "default_seed42_record_split": {
+    "train": 118,
+    "validation": 21,
+    "train_class_counts": {
+      "0": 56,
+      "1": 31,
+      "2": 31
+    },
+    "validation_class_counts": {
+      "0": 10,
+      "1": 5,
+      "2": 6
+    },
+    "same_name_overlap_count_not_confirmed_identity": 2,
+    "identical_image_sha_overlap_count": 1,
+    "all_tct_vocabulary": 5,
+    "train_tct_vocabulary": 5,
+    "validation_only_tct_categories": 0,
+    "validation_records_with_unseen_tct": 0
+  }
+}

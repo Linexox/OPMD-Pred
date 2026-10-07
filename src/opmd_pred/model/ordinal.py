@@ -15,4 +15,15 @@ def ordinal_expected_severity(logits):
 
 
 def ordinal_prediction(logits):
+    """Legacy posterior-median decision; new SYSU CLI uses probability argmax."""
     return (logits.sigmoid() > 0.5).sum(dim=-1)
+
+
+def model_probabilities(logits, head="ordinal"):
+    return ordinal_probabilities(logits) if head == "ordinal" else logits.softmax(dim=-1)
+
+
+def probability_decision(probabilities, cost_matrix=None):
+    if cost_matrix is None:
+        return probabilities.argmax(dim=-1)
+    return (probabilities @ cost_matrix).argmin(dim=-1)

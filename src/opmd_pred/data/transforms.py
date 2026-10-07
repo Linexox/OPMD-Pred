@@ -1,9 +1,18 @@
 import torch
+from PIL import Image, ImageOps
 from torchvision import transforms
 
 
-def make_image_transform(train: bool):
-    steps = [transforms.Resize((224, 224))]
+class DINOAspectPad:
+    def __call__(self, image):
+        return ImageOps.pad(
+            image, (518, 518), method=Image.Resampling.BILINEAR,
+            color=(124, 116, 104), centering=(0.5, 0.5),
+        )
+
+
+def make_image_transform(train: bool, image_encoder="vit_b16"):
+    steps = [DINOAspectPad()] if image_encoder == "dinov2_b14" else [transforms.Resize((224, 224))]
     if train:
         steps.extend(
             [

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from .vit import ImageEncoder
+from opmd_pred.data.sysu import MODALITIES
 
 
 class NumericEncoder(nn.Module):
@@ -18,17 +19,20 @@ class NumericEncoder(nn.Module):
 
 
 class MultimodalFusion(nn.Module):
-    names = ("image", "demo", "history", "tct", "dna", "methylation")
+    names = MODALITIES
 
-    def __init__(self, dimension=256, pretrained_image=True, tct_categories=8):
+    def __init__(self, dimension=256, pretrained_image=True, tct_categories=8,
+                 image_encoder="vit_b16", modalities=MODALITIES):
         super().__init__()
-        self.image_encoder       = ImageEncoder(pretrained=pretrained_image)
-        self.image_projection    = nn.Linear(self.image_encoder.output_dim, dimension)
-        self.demo_encoder        = NumericEncoder(2, dimension)
+        self.names = tuple(modalities)
+        if not self.names or len(set(self.names)) != len(self.names) or not set(self.names) <= set(MODALITIES):
+            raise ValueError(f"Select distinct modalities from {MODALITIES}")
+        self.image_encoder = ImageEncoder(pretrained=pretrained_image, kind=image_encoder) if "image" in self.names else None
+        self.image_projection = nn.Linear(self.image_encoder.output_dim, dimension) if self.image_encoder else None
         self.history_encoder     = NumericEncoder(9, dimension)
         self.dna_encoder         = NumericEncoder(1, dimension)
         self.methylation_encoder = NumericEncoder(1, dimension)
-        self.tct_encoder         = nn.Embedding(tct_categories + 1, dimension)
+        self.tct_encoder         = nn.Embedding(max(2, tct_categories + 1), dimension)
         self.missing_tokens      = nn.ParameterDict({name: nn.Parameter(torch.randn(dimension) * 0.02) for name in self.names})
         self.cls_token           = nn.Parameter(torch.zeros(dimension))
         layer = nn.TransformerEncoderLayer(
@@ -43,24 +47,18 @@ class MultimodalFusion(nn.Module):
         self.norm = nn.LayerNorm(dimension)
 
     def modality_embeddings(self, batch):
-        embeddings = {
-            "image": self.image_projection(self.image_encoder(batch["image"])),
-            "demo": self.demo_encoder(batch["demo"], batch["demo_mask"]),
-            "history": self.history_encoder(batch["history"], batch["history_mask"]),
-            "tct": self.tct_encoder(batch["tct"]),
-            "dna": self.dna_encoder(batch["dna"], batch["dna_mask"]),
-            "methylation": self.methylation_encoder(
-                batch["methylation"], batch["methylation_mask"]
-            ),
-        }
-        present = {
-            "image": batch["image_present"].bool(),
-            "demo": batch["demo_mask"].any(dim=1),
-            "history": batch["history_mask"].any(dim=1),
-            "tct": batch["tct_present"].bool(),
-            "dna": batch["dna_mask"].any(dim=1),
-            "methylation": batch["methylation_mask"].any(dim=1),
-        }
+        embeddings, present = {}, {}
+        for name in self.names:
+            if name == "image":
+                embeddings[name] = self.image_projection(self.image_encoder(batch["image"]))
+                present[name] = batch["image_present"].bool()
+            elif name == "tct":
+                embeddings[name] = self.tct_encoder(batch["tct"])
+                present[name] = batch["tct_present"].bool()
+            else:
+                encoder = getattr(self, f"{name}_encoder")
+                embeddings[name] = encoder(batch[name], batch[f"{name}_mask"])
+                present[name] = batch[f"{name}_mask"].any(dim=1)
         return embeddings, present
 
     def forward(self, batch):
@@ -77,10 +75,12 @@ class MultimodalFusion(nn.Module):
         return self.norm(self.transformer(sequence)[:, 0])
 
     def freeze_image(self):
-        self.image_encoder.freeze()
+        if self.image_encoder is not None:
+            self.image_encoder.freeze()
 
     def unfreeze_image_blocks(self, count):
-        self.image_encoder.unfreeze_last_blocks(count)
+        if self.image_encoder is not None:
+            self.image_encoder.unfreeze_last_blocks(count)
 
 
 class OrdinalHead(nn.Module):
@@ -102,18 +102,40 @@ class OrdinalHead(nn.Module):
 
 
 class MultimodalOrdinalModel(nn.Module):
-    def __init__(self, dimension=256, pretrained_image=True, tct_categories=8):
+    def __init__(self, dimension=256, pretrained_image=True, tct_categories=8,
+                 image_encoder="vit_b16", modalities=MODALITIES,
+                 head="ordinal", fusion_mode="transformer"):
         super().__init__()
         self.fusion = MultimodalFusion(
             dimension=dimension,
             pretrained_image=pretrained_image,
             tct_categories=tct_categories,
+            image_encoder=image_encoder,
+            modalities=modalities,
         )
-        self.ordinal_head = OrdinalHead(dimension)
+        if head not in {"ordinal", "softmax"} or fusion_mode not in {"transformer", "late"}:
+            raise ValueError("Unsupported head or fusion mode")
+        self.head_kind = head
+        self.fusion_mode = fusion_mode
+        self.ordinal_head = OrdinalHead(dimension) if head == "ordinal" else nn.Linear(dimension, 3)
+        self.late_heads = nn.ModuleDict({
+            name: OrdinalHead(dimension) if head == "ordinal" else nn.Linear(dimension, 3)
+            for name in self.fusion.names
+        }) if fusion_mode == "late" else None
 
     def forward(self, batch):
-        return self.ordinal_head(self.fusion(batch))
+        embeddings, present = self.fusion.modality_embeddings(batch)
+        return self.forward_from_embeddings(embeddings, present)
 
     def forward_from_embeddings(self, embeddings, present):
+        if self.fusion_mode == "late":
+            scores = torch.stack([self.late_heads[name](embeddings[name]) for name in self.fusion.names], dim=1)
+            available = torch.stack([present[name] for name in self.fusion.names], dim=1).unsqueeze(-1)
+            probabilities = scores.sigmoid() if self.head_kind == "ordinal" else scores.softmax(dim=-1)
+            averaged = (probabilities * available).sum(dim=1) / available.sum(dim=1).clamp_min(1)
+            # Empty coalitions are an explanation reference only; real no-input rows are excluded.
+            prior = 0.5 if self.head_kind == "ordinal" else 1.0 / 3
+            averaged = torch.where(available.any(dim=1), averaged, torch.full_like(averaged, prior))
+            return torch.logit(averaged.clamp(1e-7, 1 - 1e-7)) if self.head_kind == "ordinal" else averaged.clamp_min(1e-7).log()
         features = self.fusion.fuse_embeddings(embeddings, present)
         return self.ordinal_head(features)

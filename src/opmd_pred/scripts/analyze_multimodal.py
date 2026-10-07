@@ -4,12 +4,13 @@ import json
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
 
 from opmd_pred.analysis.evaluation import evaluate_coalitions
-from opmd_pred.analysis.shapley import interaction_values, shapley_values
-from opmd_pred.data.sysu import SysuDataset, load_sysu_records, split_sysu_records
-from opmd_pred.model.fusion import MultimodalOrdinalModel
+from opmd_pred.analysis.shapley import intershap_summary, interaction_values, shapley_values
+from opmd_pred.data.sysu import assign_tct_ids
+from opmd_pred.data.sysu_protocol import select_records, validate_manifest
+from opmd_pred.model.ordinal import model_probabilities
+from opmd_pred.scripts.train_sysu import make_loader, read_checkpoint, restore_checkpoint
 
 
 def parse_args():
@@ -19,8 +20,8 @@ def parse_args():
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--output", default="outputs/explainability")
     parser.add_argument("--batch-size", type=int, default=16)
-    parser.add_argument("--dimension", type=int, default=256)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--target", choices=["severe", "at_least_moderate", "expected_severity"], default="severe")
+    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
     return parser.parse_args()
 
 
@@ -33,26 +34,29 @@ def main():
     args = parse_args()
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    records = load_sysu_records(args.csv)
-    _, validation_records = split_sysu_records(records, seed=args.seed)
-    validation_set = SysuDataset(validation_records, args.images, train=False)
-    loader = DataLoader(validation_set, batch_size=args.batch_size, num_workers=0)
-    model = MultimodalOrdinalModel(
-        dimension=args.dimension,
-        pretrained_image=False,
-        tct_categories=max(record.tct_id for record in records),
-    ).to(device)
-    checkpoint = torch.load(args.checkpoint, map_location=device)
-    model.load_state_dict(checkpoint["model"])
+    device = torch.device(args.device)
+    checkpoint = read_checkpoint(args.checkpoint)
+    records = validate_manifest(checkpoint["split_manifest"], args.csv, args.images)
+    splits, _ = select_records(records, checkpoint["split_manifest"], checkpoint["model_config"]["modalities"])
+    validation_records = splits["val"]
+    if [record.sample_id for record in validation_records] != checkpoint["effective_split_ids"]["val"]:
+        raise ValueError("Validation IDs differ from saved protocol")
+    assign_tct_ids(records, checkpoint["tct_vocab"])
+    model, _ = restore_checkpoint(checkpoint, device)
+    loader = make_loader(validation_records, args.images, checkpoint["model_config"], args.batch_size, 0, device)
 
     logits, labels, names, coalition_metrics = evaluate_coalitions(model, loader, device)
-    values = logits.sigmoid().sum(dim=-1)
+    probabilities = model_probabilities(logits, model.head_kind)
+    if args.target == "severe":
+        values = probabilities[..., 2]
+    elif args.target == "at_least_moderate":
+        values = probabilities[..., 1:].sum(dim=-1)
+    else:
+        values = probabilities[..., 1] + 2 * probabilities[..., 2]
     shapley = shapley_values(values, len(names))
     interactions = interaction_values(values, len(names))
+    full_sii, intershap = intershap_summary(shapley, interactions)
     full_mask = (1 << len(names)) - 1
-    interaction_scale = values[:, full_mask].abs().mean().clamp_min(1e-8)
-    interaction_ratio = interactions.abs().mean(dim=0) / interaction_scale
 
     metrics = {
         coalition_name(int(coalition), names): coalition_metrics[str(coalition)]
@@ -67,15 +71,22 @@ def main():
         "global_mean_abs_shap": shapley.abs().mean(dim=0).tolist(),
         "global_mean_interaction": interactions.mean(dim=0).tolist(),
         "global_mean_abs_interaction": interactions.abs().mean(dim=0).tolist(),
-        "global_interaction_ratio": interaction_ratio.tolist(),
+        "global_mean_full_sii": full_sii.mean(dim=0).tolist(),
+        "global_mean_abs_full_sii_descriptive": full_sii.abs().mean(dim=0).tolist(),
+        "intershap": intershap,
+        "target": args.target,
+        "split": "val",
+        "explanation_game": "observed_modalities_removed_via_mask; absent_modalities_remain_absent",
+        "base_value_mean": values[:, 0].mean().item(),
+        "note": "InterSHAP formulas apply to this scalar missing-token coalition game; no background integration or causal claim. Mean-absolute descriptive matrices differ from abs-mean global InterSHAP.",
         "full_coalition": coalition_name(full_mask, names),
     }
     (output / "summary.json").write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps(summary, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8"
     )
 
     with (output / "samples.csv").open("w", encoding="utf-8-sig", newline="") as file:
-        fieldnames = ["sample_index"]
+        fieldnames = ["sample_index", "sample_id", "base_value", "model_value"]
         fieldnames.extend(f"shap_{name}" for name in names)
         fieldnames.extend(
             f"interaction_{names[first]}_{names[second]}"
@@ -85,7 +96,8 @@ def main():
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
         for row_index in range(shapley.size(0)):
-            row = {"sample_index": row_index}
+            row = {"sample_index": row_index, "sample_id": validation_records[row_index].sample_id,
+                   "base_value": values[row_index, 0].item(), "model_value": values[row_index, full_mask].item()}
             row.update(
                 {f"shap_{name}": float(shapley[row_index, index]) for index, name in enumerate(names)}
             )

@@ -5,9 +5,11 @@ import torch
 from torch.utils.data import DataLoader
 from loguru import logger
 
-from opmd_pred.data.sysu import SysuDataset, load_sysu_records, split_sysu_records
+from opmd_pred.data.sysu import MODALITIES, SysuDataset, assign_tct_ids, build_tct_vocab, filter_observed_records, load_sysu_records, split_sysu_records
+from opmd_pred.analysis.evaluation import classification_metrics as metrics
 from opmd_pred.model.fusion import MultimodalOrdinalModel
 from opmd_pred.model.losses import ordinal_loss
+from opmd_pred.model.ordinal import ordinal_prediction
 from opmd_pred.scripts.common import configure_logger, device_name, set_seed
 
 
@@ -38,25 +40,21 @@ def move_batch(batch, device):
     }
 
 
-def apply_modality_dropout(batch, probability, mode="bernoulli"):
+def apply_modality_dropout(batch, probability, mode="bernoulli", names=MODALITIES):
     if probability == 0:
         return batch
-    names = ["image", "demo", "history", "tct", "dna", "methylation"]
     present = torch.stack(
-        [
-            batch["image_present"].bool(),
-            batch["demo_mask"].any(1),
-            batch["history_mask"].any(1),
-            batch["tct_present"].bool(),
-            batch["dna_mask"].any(1),
-            batch["methylation_mask"].any(1),
-        ],
+        [batch[f"{name}_present"].bool() if name in {"image", "tct"}
+         else batch[f"{name}_mask"].any(1) for name in names],
         dim=1,
     )
     if mode == "subset":
-        dropped = present.clone()
+        dropped = torch.zeros_like(present)
         for row in range(present.size(0)):
             available = present[row].nonzero().flatten()
+            if not available.numel() or torch.rand(()).item() >= probability:
+                continue
+            dropped[row] = present[row]
             keep_count = torch.randint(1, available.numel() + 1, (1,)).item()
             keep = available[torch.randperm(available.numel())[:keep_count]]
             dropped[row, keep] = False
@@ -65,45 +63,18 @@ def apply_modality_dropout(batch, probability, mode="bernoulli"):
     remaining = present & ~dropped
     for row in range(present.size(0)):
         if not remaining[row].any() and present[row].any():
-            dropped[row, present[row].nonzero()[0].item()] = False
+            available = present[row].nonzero().flatten()
+            retained = available[torch.randint(available.numel(), (1,)).item()]
+            dropped[row, retained] = False
     batch = dict(batch)
-    batch["image_present"] = batch["image_present"] & ~dropped[:, 0]
-    batch["demo_mask"] = batch["demo_mask"] * (~dropped[:, 1]).unsqueeze(1)
-    batch["history_mask"] = batch["history_mask"] * (~dropped[:, 2]).unsqueeze(1)
-    batch["tct_present"] = batch["tct_present"] & ~dropped[:, 3]
-    batch["dna_mask"] = batch["dna_mask"] & ~dropped[:, 4].unsqueeze(1)
-    batch["methylation_mask"] = batch["methylation_mask"] & ~dropped[:, 5].unsqueeze(1)
+    for index, name in enumerate(names):
+        if name in {"image", "tct"}:
+            key = f"{name}_present"
+            batch[key] = batch[key].bool() & ~dropped[:, index]
+        else:
+            key = f"{name}_mask"
+            batch[key] = batch[key].bool() & ~dropped[:, index].unsqueeze(1)
     return batch
-
-
-def metrics(predictions, labels, class_count=3):
-    confusion = torch.bincount(
-        labels * class_count + predictions,
-        minlength=class_count * class_count,
-    ).reshape(class_count, class_count).float()
-    support = confusion.sum(dim=1)
-    true_positive = confusion.diag()
-    precision = true_positive / confusion.sum(dim=0).clamp_min(1)
-    recall = true_positive / support.clamp_min(1)
-    f1 = 2 * precision * recall / (precision + recall).clamp_min(1e-8)
-    macro_f1 = f1.mean().item()
-    balanced_accuracy = recall[support > 0].mean().item()
-
-    total = confusion.sum()
-    observed = torch.arange(class_count, device=confusion.device, dtype=torch.float32)
-    weights = (observed[:, None] - observed[None, :]).square()
-    observed_disagreement = (weights * confusion / total).sum()
-    expected = support[:, None] * confusion.sum(dim=0)[None, :] / total
-    expected_disagreement = (weights * expected / total).sum()
-    qwk = 1.0 - (observed_disagreement / expected_disagreement).item()
-    return {
-        "mae": (predictions - labels).abs().float().mean().item(),
-        "accuracy": (predictions == labels).float().mean().item(),
-        "macro_f1": macro_f1,
-        "balanced_accuracy": balanced_accuracy,
-        "qwk": qwk,
-        "confusion_matrix": confusion.to(torch.long).tolist(),
-    }
 
 
 def run_epoch(model, loader, optimizer, device, dropout_probability=0.0, dropout_mode="bernoulli"):
@@ -125,7 +96,7 @@ def run_epoch(model, loader, optimizer, device, dropout_probability=0.0, dropout
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-        predictions = (logits.detach().sigmoid() > 0.5).sum(dim=1)
+        predictions = ordinal_prediction(logits.detach())
         current = metrics(predictions, batch["label"])
         all_predictions.append(predictions.cpu())
         all_labels.append(batch["label"].cpu())
@@ -147,9 +118,13 @@ def main():
     set_seed(args.seed)
     output = Path(args.output)
     configure_logger(output)
+    logger.warning("Legacy exploratory sample split only; use train_sysu with reviewed patient manifest for clinical evaluation")
     device = torch.device(device_name())
     records = load_sysu_records(args.csv)
+    records, excluded = filter_observed_records(records)
     train_records, validation_records = split_sysu_records(records, seed=args.seed)
+    tct_vocab = build_tct_vocab(train_records)
+    assign_tct_ids(records, tct_vocab)
     train_set = SysuDataset(train_records, args.images, train=True)
     validation_set = SysuDataset(validation_records, args.images, train=False)
     loader_options = {
@@ -164,13 +139,15 @@ def main():
     model = MultimodalOrdinalModel(
         dimension=args.dimension,
         pretrained_image=not bool(args.image_checkpoint),
-        tct_categories=max(record.tct_id for record in records),
+        tct_categories=max(tct_vocab.values(), default=1),
     ).to(device)
     if args.image_checkpoint:
         checkpoint = torch.load(args.image_checkpoint, map_location=device)
         model.fusion.image_encoder.load_state_dict(checkpoint["image_encoder"])
     if args.fusion_checkpoint:
         checkpoint = torch.load(args.fusion_checkpoint, map_location=device)
+        if checkpoint.get("tct_vocab") != tct_vocab:
+            raise ValueError("Fusion checkpoint TCT vocabulary differs from the training-only vocabulary")
         model.fusion.load_state_dict(checkpoint["fusion"])
     if args.unfreeze_image_blocks:
         model.fusion.unfreeze_image_blocks(args.unfreeze_image_blocks)
@@ -193,9 +170,9 @@ def main():
             )
         logger.info(
             "epoch={} train_loss={:.4f} train_acc={:.4f} train_macro_f1={:.4f} "
-            "train_bal_acc={:.4f} train_mae={:.4f} train_qwk={:.4f} "
+            "train_bal_acc={:.4f} train_mae={:.4f} train_qwk={} "
             "val_loss={:.4f} val_acc={:.4f} val_macro_f1={:.4f} "
-            "val_bal_acc={:.4f} val_mae={:.4f} val_qwk={:.4f} val_cm={}",
+            "val_bal_acc={:.4f} val_mae={:.4f} val_qwk={} val_cm={}",
             epoch,
             train_loss,
             train_metrics["accuracy"],
@@ -222,6 +199,9 @@ def main():
                     "config": vars(args),
                     "validation_sample_ids": [record.sample_id for record in validation_records],
                     "modality_names": list(model.fusion.names),
+                    "tct_vocab": tct_vocab,
+                    "protocol": "legacy_exploratory_sample_split",
+                    "excluded": excluded,
                 },
                 output / "checkpoint.pt",
             )

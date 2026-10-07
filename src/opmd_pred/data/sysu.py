@@ -16,6 +16,9 @@ LABELS = {
     "level2_moderate": 1,
     "level3_severe": 2,
 }
+MODALITIES = ("image", "history", "tct", "dna", "methylation")
+TCT_MISSING_ID = 0
+TCT_UNKNOWN_ID = 1
 
 
 @dataclass
@@ -76,7 +79,31 @@ def _sex(value: str) -> float | None:
 
 def build_tct_vocab(records: list[SysuRecord]) -> dict[str, int]:
     values = sorted({record.tct for record in records if record.tct})
-    return {value: index for index, value in enumerate(values, start=1)}
+    return {value: index for index, value in enumerate(values, start=2)}
+
+
+def assign_tct_ids(records, vocab):
+    for record in records:
+        record.tct_id = vocab.get(record.tct, TCT_UNKNOWN_ID) if record.tct else TCT_MISSING_ID
+
+
+def available_modalities(record):
+    history = [record.smoking, record.smoking_years, record.smoking_amount,
+               record.alcohol, record.alcohol_years, record.alcohol_amount,
+               record.betel, record.betel_years, record.betel_amount]
+    return {"image": bool(record.image_path), "history": any(value is not None for value in history),
+            "tct": bool(record.tct), "dna": record.dna is not None, "methylation": record.methylation is not None}
+
+
+def filter_observed_records(records, modalities=MODALITIES):
+    selected, excluded = [], []
+    for record in records:
+        present = available_modalities(record)
+        if any(present[name] for name in modalities):
+            selected.append(record)
+        else:
+            excluded.append({"sample_id": record.sample_id, "reason": "all_selected_modalities_missing"})
+    return selected, excluded
 
 
 def load_sysu_records(csv_path: str | Path) -> list[SysuRecord]:
@@ -85,11 +112,11 @@ def load_sysu_records(csv_path: str | Path) -> list[SysuRecord]:
         for row in csv.DictReader(file):
             records.append(
                 SysuRecord(
-                    sample_id       =row["sample_id"],
+                    sample_id       =_text(row["sample_id"]),
                     label           =LABELS[row["label"]],
-                    image_path      =row["image_path"],
-                    sex             =_sex(row["sex"]),
-                    age             =_number(row["age"]),
+                    image_path      ="" if _text(row["image_path"]) in MISSING else _text(row["image_path"]),
+                    sex             =_sex(row.get("sex", "")),
+                    age             =_number(row.get("age", "")),
                     smoking         =_binary(row["是否吸烟"]),
                     smoking_years   =_number(row["吸烟年限（年）"]),
                     smoking_amount  =_number(row["吸烟量（支/天）"]),
@@ -99,14 +126,12 @@ def load_sysu_records(csv_path: str | Path) -> list[SysuRecord]:
                     betel           =_binary(row["是否嚼槟榔"]),
                     betel_years     =_number(row["嚼槟榔年限(年)"]),
                     betel_amount    =_number(row["嚼槟榔量（颗/天）"]),
-                    tct             =_text(row["TCT意见"]),
+                    tct             ="" if _text(row["TCT意见"]) in MISSING else _text(row["TCT意见"]),
                     dna             =_number(row["DNA倍体分析结果"]),
                     methylation     =_number(row["甲基化总数"]),
                 )
             )
-    vocab = build_tct_vocab(records)
-    for record in records:
-        record.tct_id = vocab.get(record.tct, 0)
+    assign_tct_ids(records, {})
     return records
 
 
@@ -120,17 +145,19 @@ def _value_mask(values: list[float | None], scale: list[float]) -> tuple[torch.T
 
 
 class SysuDataset(Dataset):
-    def __init__(self, records, image_root: str | Path, train: bool = False):
-        self.records = records
+    def __init__(self, records, image_root: str | Path, train: bool = False,
+                 image_encoder="vit_b16", modalities=MODALITIES):
+        self.records, self.excluded = filter_observed_records(records, modalities)
         self.image_root = Path(image_root)
-        self.transform = make_image_transform(train)
+        self.transform = make_image_transform(train, image_encoder)
+        self.image_size = 518 if image_encoder == "dinov2_b14" else 224
+        self.modalities = tuple(modalities)
 
     def __len__(self):
         return len(self.records)
 
     def __getitem__(self, index):
         record = self.records[index]
-        demo, demo_mask = _value_mask([record.sex, record.age], [1.0, 100.0])
         history, history_mask = _value_mask(
             [
                 record.smoking,
@@ -148,21 +175,31 @@ class SysuDataset(Dataset):
         dna, dna_mask = _value_mask([record.dna], [1.0])
         methylation, methylation_mask = _value_mask([record.methylation], [10.0])
 
-        image_present = bool(record.image_path)
-        image = torch.zeros(3, 224, 224)
+        image_present = "image" in self.modalities and bool(record.image_path)
+        image = torch.zeros(3, self.image_size, self.image_size)
         if image_present:
             image_file = self.image_root / record.image_path
-            image = self.transform(Image.open(image_file).convert("RGB"))
+            with Image.open(image_file) as opened:
+                image = self.transform(opened.convert("RGB"))
+
+        if "history" not in self.modalities:
+            history.zero_()
+            history_mask.zero_()
+        if "dna" not in self.modalities:
+            dna.zero_()
+            dna_mask.zero_()
+        if "methylation" not in self.modalities:
+            methylation.zero_()
+            methylation_mask.zero_()
+        tct_present = "tct" in self.modalities and bool(record.tct)
 
         return {
             "image":            image,
             "image_present":    torch.tensor(image_present),
-            "demo":             demo,
-            "demo_mask":        demo_mask,
             "history":          history,
             "history_mask":     history_mask,
-            "tct":              torch.tensor(record.tct_id, dtype=torch.long),
-            "tct_present":      torch.tensor(bool(record.tct)),
+            "tct":              torch.tensor(record.tct_id if tct_present else TCT_MISSING_ID, dtype=torch.long),
+            "tct_present":      torch.tensor(tct_present),
             "dna":              dna,
             "dna_mask":         dna_mask.bool(),
             "methylation":      methylation,
@@ -173,6 +210,7 @@ class SysuDataset(Dataset):
 
 
 def split_sysu_records(records: list[SysuRecord], validation_fraction=0.15, seed=42):
+    """Legacy sample-level exploratory split; not a patient-independent clinical protocol."""
     generator = torch.Generator().manual_seed(seed)
     train, validation = [], []
     for label in sorted({record.label for record in records}):

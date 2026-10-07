@@ -1,5 +1,6 @@
 """Create the SYSU CSV and exact-stem lesion image directory."""
 
+import argparse
 import csv
 import shutil
 from pathlib import Path
@@ -8,8 +9,6 @@ from openpyxl import load_workbook
 
 
 FIELDS = [
-    "sex",
-    "age",
     "是否吸烟",
     "吸烟年限（年）",
     "吸烟量（支/天）",
@@ -36,11 +35,15 @@ def clean(value):
     return value
 
 
-def read_rows(path):
+def read_rows(path, sheet_name):
     workbook = load_workbook(path, read_only=True, data_only=True)
-    sheet = workbook.active
-    values = list(sheet.iter_rows(values_only=True))
+    try:
+        values = list(workbook[sheet_name].iter_rows(values_only=True))
+    finally:
+        workbook.close()
     headers = [str(value).strip() if value is not None else "" for value in values[0]]
+    if not {"name", *FIELDS} <= set(headers):
+        raise ValueError(f"Required source columns missing in {path.name}/{sheet_name}")
     return [dict(zip(headers, row)) for row in values[1:] if any(row)]
 
 
@@ -66,36 +69,42 @@ def image_for_row(level_dir, patient_name, used_dirs):
     ]
     if not candidates:
         return None
-    directory = sorted(candidates, key=lambda item: item.name)[0]
+    if len(candidates) != 1:
+        raise ValueError("Ambiguous image-directory binding: review source identity before preparing data")
+    directory = candidates[0]
     used_dirs.add(directory)
     images = [
         path
         for path in directory.iterdir()
         if path.is_file() and path.stem == "病损"
     ]
+    if len(images) > 1:
+        raise ValueError("Multiple exact-stem lesion images: review image selection before preparing data")
     return images[0] if images else None
 
 
 def main():
-    root = Path("data")
-    output = root / "SYSU_processed"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-root", type=Path, default=Path("data/sysu"))
+    parser.add_argument("--output", type=Path, required=True, help="New directory; existing data is never overwritten")
+    args = parser.parse_args()
+    output = args.output
+    if output.exists():
+        raise FileExistsError("Use a new output directory and review it before switching training data")
     image_output = output / "images"
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True)
     image_output.mkdir(exist_ok=True)
-    for path in image_output.iterdir():
-        if path.is_file():
-            path.unlink()
 
     sources = [
-        ("level1", "level1_mild_or_normal", "mild+normal.xlsx"),
-        ("level2", "level2_moderate", "moderate.xlsx"),
-        ("level3", "level3_severe", "severe.xlsx"),
+        ("level1", "level1_mild_or_normal", "mild+normal.xlsx", "mild"),
+        ("level2", "level2_moderate", "moderate.xlsx", "moderate"),
+        ("level3", "level3_severe", "severe.xlsx", "severe"),
     ]
     rows = []
-    for level, label, filename in sources:
-        source = root / "sysu" / level
+    for level, label, filename, sheet_name in sources:
+        source = args.source_root / level
         used_dirs = set()
-        for excel_row, source_row in enumerate(read_rows(source / filename), start=2):
+        for excel_row, source_row in enumerate(read_rows(source / filename, sheet_name), start=2):
             record = {
                 "sample_id": f"{level}_{excel_row:03d}",
                 "label": label,
