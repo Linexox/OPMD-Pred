@@ -76,7 +76,7 @@ def image_for_row(level_dir, patient_name, used_dirs):
     images = [
         path
         for path in directory.iterdir()
-        if path.is_file() and path.stem == "病损"
+        if path.is_file() and path.name.casefold() == "病损.jpg"
     ]
     if len(images) > 1:
         raise ValueError("Multiple exact-stem lesion images: review image selection before preparing data")
