@@ -33,6 +33,7 @@ def parse_args():
     parser.add_argument("--modalities", nargs="+", choices=MODALITIES, default=list(MODALITIES))
     parser.add_argument("--fusion", choices=["transformer", "late"], default="transformer")
     parser.add_argument("--head", choices=["softmax", "ordinal", "corn"], default="softmax")
+    parser.add_argument("--class-weighting", choices=["none", "balanced"], default="none")
     parser.add_argument("--ordinal-distance-weight", type=float, default=0.0, help="Opt-in squared cumulative target loss")
     parser.add_argument("--cost-matrix", default="", help="Opt-in JSON 3x3 matrix: rows=true, columns=decision; no clinical default")
     parser.add_argument("--output", required=True)
@@ -62,6 +63,8 @@ def parse_args():
         parser.error("Dimension must be divisible by 4; modality-dropout must be in [0,1]")
     if any(not math.isfinite(weight) or weight < 0 for weight in (args.subset_weight, args.consistency_weight, args.ordinal_distance_weight)):
         parser.error("Subset, consistency and distance weights must be finite and nonnegative")
+    if args.class_weighting != "none" and args.head != "softmax":
+        parser.error("This class-weight contrast supports softmax only")
     return args
 
 
@@ -119,9 +122,11 @@ def summarize_probabilities(probabilities, labels, cost_matrix=None):
 
 
 def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mode="bernoulli", cost_matrix=None,
-              subset_weight=0.0, consistency_weight=0.0, consistency_type="cdf_mse", ordinal_distance_weight=0.0):
+              subset_weight=0.0, consistency_weight=0.0, consistency_type="cdf_mse", ordinal_distance_weight=0.0,
+              class_weights=None):
     training = optimizer is not None
     model.train(training)
+    weights = None if class_weights is None else torch.tensor(class_weights, dtype=torch.float32, device=device)
     labels, probabilities, total_loss = [], [], 0.0
     probability_total, probability_normalizer, distance_total = 0.0, 0, 0.0
     dual_view = training and (subset_weight > 0 or consistency_weight > 0)
@@ -141,12 +146,12 @@ def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mo
                 subset_logits = model.forward_from_embeddings(embeddings, subset)
             else:
                 logits = model(batch)
-            probability_loss = classification_loss(logits, batch["label"], model.head_kind)
+            probability_loss = classification_loss(logits, batch["label"], model.head_kind, weights)
             distance = cumulative_distance_loss(model_probabilities(logits, model.head_kind), batch["label"])
             loss = probability_loss + ordinal_distance_weight * distance
             if dual_view:
                 observed_loss = loss
-                subset_loss = classification_loss(subset_logits, batch["label"], model.head_kind)
+                subset_loss = classification_loss(subset_logits, batch["label"], model.head_kind, weights)
                 subset_distance = cumulative_distance_loss(model_probabilities(subset_logits, model.head_kind), batch["label"])
                 subset_loss = subset_loss + ordinal_distance_weight * subset_distance
                 p_observed = model_probabilities(logits, model.head_kind)
@@ -170,6 +175,8 @@ def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mo
         total_loss += loss.item() * batch["label"].numel()
         count = batch["label"].numel()
         task_count = count + int((batch["label"] > 0).sum().item()) if model.head_kind == "corn" and not training else count
+        if weights is not None and not training:
+            task_count = weights[batch["label"]].sum().item()
         probability_total += probability_loss.item() * task_count
         probability_normalizer += task_count
         distance_total += distance.item() * count
@@ -183,10 +190,12 @@ def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mo
         summary["view_mask_trace"] = mask_trace
     summary["probability_loss"] = probability_total / probability_normalizer
     summary["probability_loss_aggregation"] = "global_conditional_task_mean" if model.head_kind == "corn" and not training else "record_weighted_minibatch_mean"
+    if weights is not None and not training:
+        summary["probability_loss_aggregation"] = "global_weighted_target_mean"
     summary["squared_cumulative_distance"] = distance_total / labels.numel()
     summary["ordinal_distance_weight"] = ordinal_distance_weight
     summary["loss"] = (summary["probability_loss"] + ordinal_distance_weight * summary["squared_cumulative_distance"]
-                       if model.head_kind == "corn" and not training else total_loss / labels.numel())
+                       if (model.head_kind == "corn" or weights is not None) and not training else total_loss / labels.numel())
     return summary, labels, probabilities
 
 
@@ -222,6 +231,8 @@ def main():
     if {record.label for record in splits["train"]} != {0, 1, 2}:
         raise ValueError("Training eligible records must include all three classes; do not search seeds using the held-out test")
     coverage = split_coverage(manifest, splits)
+    train_counts = [sum(record.label == label for record in splits["train"]) for label in range(3)]
+    class_weights = [len(splits["train"]) / (3 * count) for count in train_counts] if args.class_weighting == "balanced" else None
     tct_vocab = build_tct_vocab(splits["train"])
     assign_tct_ids(records, tct_vocab)
     cost_matrix = read_cost_matrix(args.cost_matrix)
@@ -259,16 +270,18 @@ def main():
     write_json(output / "split_manifest.json", manifest)
     write_json(output / "config.json", {**vars(args), "model_config": config, "tct_vocab": tct_vocab,
                                         "tct_special_ids": {"missing": 0, "unknown_observed": 1},
-                                        "cost_matrix": cost_matrix, "view_recipe": view_recipe, "effective_split_ids": effective_ids, "excluded": excluded,
+                                        "cost_matrix": cost_matrix, "view_recipe": view_recipe, "class_weights": class_weights,
+                                        "class_weight_train_counts": train_counts, "effective_split_ids": effective_ids, "excluded": excluded,
                                         "encoder_source": encoder_source, "split_manifest_sha256": manifest_sha,
                                         "split_manifest_source_sha256": manifest_source_sha, "split_coverage": coverage})
     history, best_key, stale, best_epoch = [], (-1.0, -1.0), 0, None
     for epoch in range(1, args.epochs + 1):
         train_metrics, _, _ = run_epoch(model, train_loader, device, optimizer, args.modality_dropout, args.dropout_mode, cost_matrix,
                                         subset_weight=args.subset_weight, consistency_weight=args.consistency_weight,
-                                        consistency_type=args.consistency_type, ordinal_distance_weight=args.ordinal_distance_weight)
+                                        consistency_type=args.consistency_type, ordinal_distance_weight=args.ordinal_distance_weight,
+                                        class_weights=class_weights)
         val_metrics, _, _ = run_epoch(model, val_loader, device, cost_matrix=cost_matrix,
-                                    ordinal_distance_weight=args.ordinal_distance_weight)
+                                    ordinal_distance_weight=args.ordinal_distance_weight, class_weights=class_weights)
         add_coverage_metrics(train_metrics, coverage["train"])
         if "observed_view" in train_metrics:
             add_coverage_metrics(train_metrics["observed_view"], coverage["train"])
@@ -281,6 +294,7 @@ def main():
             torch.save({"format": CHECKPOINT_FORMAT, "model": model.state_dict(), "optimizer": optimizer.state_dict(),
                         "epoch": epoch, "validation_metrics": val_metrics, "selection_rule": "val_argmax_all_assigned_accuracy_then_eligible_macro_f1",
                         "model_config": config, "training_config": vars(args), "cost_matrix": cost_matrix, "view_recipe": view_recipe,
+                        "class_weights": class_weights, "class_weight_train_counts": train_counts,
                         "tct_vocab": tct_vocab, "tct_special_ids": {"missing": 0, "unknown_observed": 1},
                         "split_manifest": manifest, "split_manifest_sha256": manifest_sha,
                         "split_manifest_source_sha256": manifest_source_sha, "split_coverage": coverage,

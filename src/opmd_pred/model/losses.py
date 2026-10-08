@@ -17,12 +17,12 @@ def corn_loss(logits, labels):
     return (first + second) / (labels.numel() + eligible.sum())
 
 
-def classification_loss(logits, labels, head="softmax"):
+def classification_loss(logits, labels, head="softmax", class_weights=None):
     if head == "ordinal":
         return ordinal_loss(logits, labels)
     if head == "corn":
         return corn_loss(logits, labels)
-    return F.cross_entropy(logits, labels)
+    return F.cross_entropy(logits, labels, weight=class_weights)
 
 
 def cumulative_distance_loss(probabilities, labels):

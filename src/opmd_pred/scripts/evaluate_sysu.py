@@ -38,7 +38,8 @@ def main():
     model, _ = restore_checkpoint(checkpoint, device)
     loader = make_loader(splits[args.split], args.images, config, args.batch_size, args.num_workers, device)
     metrics, labels, probabilities = run_epoch(model, loader, device, cost_matrix=checkpoint["cost_matrix"],
-                                             ordinal_distance_weight=checkpoint["training_config"].get("ordinal_distance_weight", 0.0))
+                                             ordinal_distance_weight=checkpoint["training_config"].get("ordinal_distance_weight", 0.0),
+                                             class_weights=checkpoint.get("class_weights"))
     coverage = split_coverage(checkpoint["split_manifest"], splits)
     add_coverage_metrics(metrics, coverage[args.split])
     output.parent.mkdir(parents=True, exist_ok=True)
