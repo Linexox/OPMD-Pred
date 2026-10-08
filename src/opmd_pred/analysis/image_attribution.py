@@ -2,6 +2,7 @@
 
 import torch
 from PIL import Image, ImageOps
+from torchvision.transforms.functional import gaussian_blur
 
 from opmd_pred.model.ordinal import model_probabilities
 
@@ -26,7 +27,7 @@ def integrated_gradients(model, batch, target="severe", baseline="mean", steps=3
     """Trapezoidal path integral using steps intervals and steps+1 gradients."""
     if type(steps) is not int or steps < 1:
         raise ValueError("steps must be a positive integer")
-    if target not in TARGETS or baseline not in {"mean", "black"}:
+    if target not in TARGETS or baseline not in {"mean", "black", "blur"}:
         raise ValueError("Unknown attribution target or baseline")
     if model.training:
         raise ValueError("Restore the fixed model in eval mode before attribution")
@@ -42,6 +43,8 @@ def integrated_gradients(model, batch, target="severe", baseline="mean", steps=3
         mean = image.new_tensor(MEAN).view(1, 3, 1, 1)
         std = image.new_tensor(STD).view(1, 3, 1, 1)
         reference = (-mean / std).expand_as(image)
+    elif baseline == "blur":
+        reference = gaussian_blur(image, kernel_size=31, sigma=8).detach()
     difference = image - reference
     total_gradient = torch.zeros_like(image)
     endpoints = {}
@@ -64,6 +67,7 @@ def integrated_gradients(model, batch, target="severe", baseline="mean", steps=3
     delta = endpoints[steps] - endpoints[0]
     return {"pixel_attribution": attribution, "target": target, "baseline": baseline,
             "steps": steps, "integration": "trapezoidal; steps intervals; steps+1 gradients",
+            "blur_reference": {"kernel_size": 31, "sigma": 8, "coordinates": "normalized model canvas"} if baseline == "blur" else None,
             "input_value": endpoints[steps], "baseline_value": endpoints[0],
             "output_difference": delta, "attribution_sum": attribution_sum,
             "completeness_residual": delta - attribution_sum,

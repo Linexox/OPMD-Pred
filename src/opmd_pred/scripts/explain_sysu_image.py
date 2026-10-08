@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--sample-id", required=True, help="A sample ID from checkpoint's saved validation split only")
     parser.add_argument("--output", required=True, help="New directory; never overwrite")
     parser.add_argument("--target", choices=TARGETS, default="severe")
-    parser.add_argument("--baseline", choices=["mean", "black"], default="mean")
+    parser.add_argument("--baseline", choices=["mean", "black", "blur"], default="mean")
     parser.add_argument("--steps", type=int, default=32)
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
     args = parser.parse_args()
@@ -77,7 +77,8 @@ def main():
                "sample_id": record.sample_id, "image_sha256": image_sha, "model_config": config,
                "pillow_version": pillow_version, "device": args.device,
                "fixed_nonimage_inputs_and_masks": True, "parameter_updates": False,
-               "baseline_semantics": "RGB ImageNet mean" if args.baseline == "mean" else "RGB black normalized by ImageNet mean/std",
+               "baseline_semantics": {"mean": "RGB ImageNet mean", "black": "RGB black normalized by ImageNet mean/std",
+                                      "blur": "Gaussian-blurred same observed image; detail-relative response, not image removal"}[args.baseline],
                "limitation": "Numerical completeness is not faithfulness, lesion localization or medical causality"})
     print(f"Validation image IG written to {output}; review completeness and perturbation evidence separately")
 
