@@ -113,13 +113,14 @@ class MultimodalOrdinalModel(nn.Module):
             image_encoder=image_encoder,
             modalities=modalities,
         )
-        if head not in {"ordinal", "softmax"} or fusion_mode not in {"transformer", "late"}:
+        if head not in {"ordinal", "softmax", "corn"} or fusion_mode not in {"transformer", "late"}:
             raise ValueError("Unsupported head or fusion mode")
         self.head_kind = head
         self.fusion_mode = fusion_mode
-        self.ordinal_head = OrdinalHead(dimension) if head == "ordinal" else nn.Linear(dimension, 3)
+        output_size = 2 if head == "corn" else 3
+        self.ordinal_head = OrdinalHead(dimension) if head == "ordinal" else nn.Linear(dimension, output_size)
         self.late_heads = nn.ModuleDict({
-            name: OrdinalHead(dimension) if head == "ordinal" else nn.Linear(dimension, 3)
+            name: OrdinalHead(dimension) if head == "ordinal" else nn.Linear(dimension, output_size)
             for name in self.fusion.names
         }) if fusion_mode == "late" else None
 
@@ -131,11 +132,19 @@ class MultimodalOrdinalModel(nn.Module):
         if self.fusion_mode == "late":
             scores = torch.stack([self.late_heads[name](embeddings[name]) for name in self.fusion.names], dim=1)
             available = torch.stack([present[name] for name in self.fusion.names], dim=1).unsqueeze(-1)
-            probabilities = scores.sigmoid() if self.head_kind == "ordinal" else scores.softmax(dim=-1)
+            if self.head_kind == "corn":
+                conditional = scores.sigmoid()
+                probabilities = torch.stack([conditional[..., 0], conditional[..., 0] * conditional[..., 1]], dim=-1)
+            else:
+                probabilities = scores.sigmoid() if self.head_kind == "ordinal" else scores.softmax(dim=-1)
             averaged = (probabilities * available).sum(dim=1) / available.sum(dim=1).clamp_min(1)
             # Empty coalitions are an explanation reference only; real no-input rows are excluded.
-            prior = 0.5 if self.head_kind == "ordinal" else 1.0 / 3
+            prior = 0.5 if self.head_kind in {"ordinal", "corn"} else 1.0 / 3
             averaged = torch.where(available.any(dim=1), averaged, torch.full_like(averaged, prior))
+            if self.head_kind == "corn":
+                # Pool unconditional cumulative probabilities; reconstruct conditional logits.
+                averaged = torch.stack([averaged[..., 0], averaged[..., 1] / averaged[..., 0].clamp_min(1e-7)], dim=-1)
+                return torch.logit(averaged.clamp(1e-7, 1 - 1e-7))
             return torch.logit(averaged.clamp(1e-7, 1 - 1e-7)) if self.head_kind == "ordinal" else averaged.clamp_min(1e-7).log()
         features = self.fusion.fuse_embeddings(embeddings, present)
         return self.ordinal_head(features)

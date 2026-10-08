@@ -6,14 +6,13 @@ from importlib.metadata import version
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from opmd_pred.analysis.evaluation import classification_metrics
 from opmd_pred.data.sysu import MODALITIES, SysuDataset, assign_tct_ids, build_tct_vocab
 from opmd_pred.data.sysu_protocol import PROTOCOL, file_sha256, load_manifest, manifest_digest, select_records, split_coverage
 from opmd_pred.model.fusion import MultimodalOrdinalModel
-from opmd_pred.model.losses import ordinal_loss
+from opmd_pred.model.losses import classification_loss, cumulative_distance_loss
 from opmd_pred.model.ordinal import model_probabilities, probability_decision
 from opmd_pred.scripts.common import set_seed
 from opmd_pred.scripts.train_multimodal import apply_modality_dropout, move_batch
@@ -32,7 +31,9 @@ def parse_args():
     parser.add_argument("--image-checkpoint", default="", help="Required when image is selected; no pretrained downloads")
     parser.add_argument("--modalities", nargs="+", choices=MODALITIES, default=list(MODALITIES))
     parser.add_argument("--fusion", choices=["transformer", "late"], default="transformer")
-    parser.add_argument("--head", choices=["softmax", "ordinal"], default="softmax")
+    parser.add_argument("--head", choices=["softmax", "ordinal", "corn"], default="softmax")
+    parser.add_argument("--ordinal-distance-weight", type=float, default=0.0,
+                        help="Research-only squared CDF target loss coefficient; default disables it")
     parser.add_argument("--cost-matrix", default="", help="Opt-in JSON 3x3 matrix: rows=true, columns=decision; no clinical default")
     parser.add_argument("--output", required=True)
     parser.add_argument("--epochs", type=int, default=50)
@@ -56,6 +57,8 @@ def parse_args():
         parser.error("Use positive epochs/batch-size/patience/lr and nonnegative num-workers")
     if args.dimension < 4 or args.dimension % 4 or not 0 <= args.modality_dropout <= 1:
         parser.error("Dimension must be divisible by 4; modality-dropout must be in [0,1]")
+    if not 0 <= args.ordinal_distance_weight < float("inf"):
+        parser.error("ordinal-distance-weight must be finite and nonnegative")
     return args
 
 
@@ -99,17 +102,21 @@ def make_loader(records, images, config, batch_size, workers, device, training=F
                       num_workers=workers, pin_memory=device.type == "cuda")
 
 
-def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mode="bernoulli", cost_matrix=None):
+def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mode="bernoulli", cost_matrix=None,
+              ordinal_distance_weight=0.0):
     training = optimizer is not None
     model.train(training)
-    labels, probabilities, total_loss = [], [], 0.0
+    labels, probabilities, total_loss, total_probability_loss, total_distance = [], [], 0.0, 0.0, 0.0
+    probability_normalizer = 0
     for batch in loader:
         batch = move_batch(batch, device)
         if training:
             batch = apply_modality_dropout(batch, probability, dropout_mode, model.fusion.names)
         with torch.set_grad_enabled(training):
             logits = model(batch)
-            loss = ordinal_loss(logits, batch["label"]) if model.head_kind == "ordinal" else F.cross_entropy(logits, batch["label"])
+            probability_loss = classification_loss(logits, batch["label"], model.head_kind)
+            distance = cumulative_distance_loss(model_probabilities(logits, model.head_kind), batch["label"])
+            loss = probability_loss + ordinal_distance_weight * distance
             if training:
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
@@ -117,6 +124,11 @@ def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mo
         labels.append(batch["label"].detach().cpu())
         probabilities.append(model_probabilities(logits.detach(), model.head_kind).cpu())
         total_loss += loss.item() * batch["label"].numel()
+        count = batch["label"].numel()
+        task_count = count + int((batch["label"] > 0).sum().item()) if model.head_kind == "corn" and not training else count
+        total_probability_loss += probability_loss.item() * task_count
+        probability_normalizer += task_count
+        total_distance += distance.item() * batch["label"].numel()
     labels, probabilities = torch.cat(labels), torch.cat(probabilities)
     argmax = probability_decision(probabilities)
     summary = classification_metrics(argmax, labels)
@@ -127,7 +139,16 @@ def run_epoch(model, loader, device, optimizer=None, probability=0.0, dropout_mo
         cost_summary["mean_cost"] = costs[labels, decisions].mean().item()
         summary["cost_decision"] = cost_summary
         summary["argmax_mean_cost"] = costs[labels, argmax].mean().item()
-    summary["loss"] = total_loss / labels.numel()
+    summary["probability_loss"] = total_probability_loss / probability_normalizer
+    summary["probability_loss_aggregation"] = (
+        "global_conditional_task_mean" if model.head_kind == "corn" and not training else "record_weighted_minibatch_mean"
+    )
+    summary["squared_cumulative_distance"] = total_distance / labels.numel()
+    summary["loss"] = (
+        summary["probability_loss"] + ordinal_distance_weight * summary["squared_cumulative_distance"]
+        if model.head_kind == "corn" and not training else total_loss / labels.numel()
+    )
+    summary["ordinal_distance_weight"] = ordinal_distance_weight
     return summary, labels, probabilities
 
 
@@ -199,8 +220,10 @@ def main():
                                         "split_manifest_source_sha256": manifest_source_sha, "split_coverage": coverage})
     history, best_key, stale, best_epoch = [], (-1.0, -1.0), 0, None
     for epoch in range(1, args.epochs + 1):
-        train_metrics, _, _ = run_epoch(model, train_loader, device, optimizer, args.modality_dropout, args.dropout_mode, cost_matrix)
-        val_metrics, _, _ = run_epoch(model, val_loader, device, cost_matrix=cost_matrix)
+        train_metrics, _, _ = run_epoch(model, train_loader, device, optimizer, args.modality_dropout, args.dropout_mode, cost_matrix,
+                                      args.ordinal_distance_weight)
+        val_metrics, _, _ = run_epoch(model, val_loader, device, cost_matrix=cost_matrix,
+                                    ordinal_distance_weight=args.ordinal_distance_weight)
         add_coverage_metrics(train_metrics, coverage["train"])
         add_coverage_metrics(val_metrics, coverage["val"])
         history.append({"epoch": epoch, "train": train_metrics, "val": val_metrics})

@@ -20,7 +20,14 @@ def ordinal_prediction(logits):
 
 
 def model_probabilities(logits, head="ordinal"):
-    return ordinal_probabilities(logits) if head == "ordinal" else logits.softmax(dim=-1)
+    if head == "ordinal":
+        return ordinal_probabilities(logits)
+    if head == "corn":
+        conditional = logits.sigmoid()
+        first = conditional[..., 0]
+        second = first * conditional[..., 1]
+        return torch.stack([1 - first, first - second, second], dim=-1)
+    return logits.softmax(dim=-1)
 
 
 def probability_decision(probabilities, cost_matrix=None):
