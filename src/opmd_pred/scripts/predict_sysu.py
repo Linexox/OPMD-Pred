@@ -230,7 +230,7 @@ table{border-collapse:collapse;font-size:14px;margin:12px 0}th,td{padding:8px 12
 th{background:#eef3fa}.diagonal{background:#f4eee6}.pairwise{background:#f5f8fc}.scroll{overflow-x:auto}
 img{max-width:100%;max-height:600px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}a{color:#235a98}
 </style></head><body><main><header><h1>SYSU 验证记录预测研究报告</h1>""" + (
-        f"<p class='warning'>{escape(NOTICE)}</p><p>单位：记录；仅保存val，不访问test。"
+        f"<p class='warning'>{escape(NOTICE)}</p><p>来源分组探索性协议；患者身份及重复标签尚未核对。单位：记录；仅保存val，不访问test。"
         f"选中 {len(report['records'])} 条，预测 {report['predicted_count']} 条，资料不足 {report['abstained_count']} 条。</p>"
         f"{global_note}<nav aria-label='记录导航'>{navigation}</nav></header>{cards}"
         f"<details><summary>模型与数据协议来源</summary><pre>{escape(json.dumps(provenance, ensure_ascii=False, indent=2))}</pre></details>"
@@ -277,6 +277,8 @@ def main():
     report = {"format": "sysu-private-prediction-v1", "notice": NOTICE,
               "checkpoint_sha256": checkpoint_sha, "checkpoint_epoch": checkpoint["epoch"],
               "split_manifest_sha256": checkpoint["split_manifest_sha256"], "csv_sha256": manifest["csv_sha256"],
+              "protocol": manifest["protocol"], "identity_verified": manifest["identity_verified"],
+              "unresolved_image_label_conflicts": manifest["unresolved_image_label_conflicts"],
               "split": "val", "evaluation_unit": "record", "model_config": config,
               "selection_rule": checkpoint.get("selection_rule"), "encoder_source": checkpoint.get("encoder_source"),
               "cost_matrix": checkpoint["cost_matrix"], "cost_source": "checkpoint_saved_snapshot" if cost is not None else None,
