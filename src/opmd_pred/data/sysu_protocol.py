@@ -1,4 +1,4 @@
-"""Reviewed patient mapping and immutable SYSU split protocol; no patient-ID inference."""
+"""Exploratory source-name/photo groups; explicitly not a reviewed patient identity protocol."""
 
 import csv
 import hashlib
@@ -10,7 +10,7 @@ from pathlib import Path
 from .sysu import LABELS, MODALITIES, available_modalities, load_sysu_records
 
 
-PROTOCOL = "sysu-patient-hash-v1"
+PROTOCOL = "sysu-source-name-sha-proxy-v1"
 SPLITS = ("train", "val", "test")
 
 
@@ -44,10 +44,18 @@ def inspect_records(records, images):
             labels_by_hash.setdefault(digest, {}).setdefault(record.label, []).append(record.sample_id)
         else:
             hashes[record.sample_id] = None
-    conflicts = [groups for groups in labels_by_hash.values() if len(groups) > 1]
-    if conflicts:
-        raise ValueError(f"Identical image has conflicting labels; review these sample IDs before splitting: {conflicts}")
+    # Preserve provided labels for exploration. Shared photos still cannot cross splits.
     return by_id, hashes, excluded
+
+
+def image_label_conflicts(records, hashes):
+    groups = {}
+    for record in records:
+        digest = hashes[record.sample_id]
+        if digest is not None:
+            groups.setdefault(digest, []).append({"sample_id": record.sample_id, "label": record.label})
+    return [{"image_sha256": digest, "records": entries} for digest, entries in groups.items()
+            if len({entry["label"] for entry in entries}) > 1]
 
 
 def build_manifest(csv_path, images, groups_path, seed=42, val_fraction=0.15, test_fraction=0.15):
@@ -56,10 +64,12 @@ def build_manifest(csv_path, images, groups_path, seed=42, val_fraction=0.15, te
     groups = {}
     with Path(groups_path).open(encoding="utf-8-sig", newline="") as file:
         reader = csv.DictReader(file)
-        if not {"sample_id", "patient_id"} <= set(reader.fieldnames or []):
-            raise ValueError("Reviewed groups CSV needs sample_id,patient_id columns")
+        if not {"sample_id", "candidate_patient_id", "review_status"} <= set(reader.fieldnames or []):
+            raise ValueError("Proxy CSV needs sample_id,candidate_patient_id,review_status; do not label this verified identity")
         for row in reader:
-            sample_id, patient_id = row["sample_id"].strip(), row["patient_id"].strip()
+            if row["review_status"] != "unverified_source_name_group":
+                raise ValueError("This exploratory protocol requires explicit unverified-source-name provenance")
+            sample_id, patient_id = row["sample_id"].strip(), row["candidate_patient_id"].strip()
             if not patient_id or sample_id not in by_id or sample_id in groups:
                 raise ValueError("Groups CSV has an empty patient_id, unknown sample_id, or duplicate sample_id")
             groups[sample_id] = patient_id
@@ -97,15 +107,17 @@ def build_manifest(csv_path, images, groups_path, seed=42, val_fraction=0.15, te
     assignments = {group: "val" for group in components[:val_count]}
     assignments.update({group: "test" for group in components[val_count:val_count + test_count]})
     assignments.update({group: "train" for group in components[val_count + test_count:]})
-    entries = [{"sample_id": record.sample_id, "patient_id": groups[record.sample_id],
+    entries = [{"sample_id": record.sample_id, "source_group_id": groups[record.sample_id],
                 "label": record.label, "image_sha256": hashes[record.sample_id],
                 "split": assignments[find(groups[record.sample_id])]} for record in included]
     manifest = {
         "schema_version": 1, "protocol": PROTOCOL,
-        "patient_mapping_source": "externally_reviewed_anonymous_groups_csv",
+        "patient_mapping_source": "unverified_raw_excel_name_groups_plus_shared_photo_sha",
+        "identity_verified": False, "labels_corrected": False,
+        "unresolved_image_label_conflicts": image_label_conflicts(records, hashes),
         "csv_sha256": file_sha256(csv_path), "groups_sha256": file_sha256(groups_path),
         "seed": seed, "val_fraction": val_fraction, "test_fraction": test_fraction,
-        "split_unit": "patient_or_shared_image_component", "label_mapping": LABELS,
+        "split_unit": "source_name_or_shared_image_component", "label_mapping": LABELS,
         "records": entries, "excluded": excluded,
         "split_ids": {split: [entry["sample_id"] for entry in entries if entry["split"] == split] for split in SPLITS},
     }
@@ -115,20 +127,22 @@ def build_manifest(csv_path, images, groups_path, seed=42, val_fraction=0.15, te
 
 def validate_manifest(manifest, csv_path, images, records=None):
     if manifest.get("protocol") != PROTOCOL or manifest.get("schema_version") != 1:
-        raise ValueError("Use a sysu-patient-hash-v1 manifest built from reviewed anonymous patient groups")
+        raise ValueError("Use the explicit source-name/SHA proxy manifest for exploratory work only")
     if manifest.get("csv_sha256") != file_sha256(csv_path) or manifest.get("label_mapping") != LABELS:
         raise ValueError("Dataset CSV or label mapping differs from manifest")
-    if manifest.get("patient_mapping_source") != "externally_reviewed_anonymous_groups_csv":
-        raise ValueError("Manifest requires external reviewed patient mapping provenance")
+    if manifest.get("patient_mapping_source") != "unverified_raw_excel_name_groups_plus_shared_photo_sha" or manifest.get("identity_verified") is not False:
+        raise ValueError("Proxy provenance must not claim confirmed patient identity")
     records = load_sysu_records(csv_path) if records is None else records
     by_id, hashes, excluded = inspect_records(records, images)
+    if manifest.get("unresolved_image_label_conflicts") != image_label_conflicts(records, hashes):
+        raise ValueError("Unresolved source-label conflict records differ from manifest")
     actual_excluded = {entry["sample_id"]: entry["reason"] for entry in excluded}
     recorded_excluded = {entry["sample_id"]: entry["reason"] for entry in manifest["excluded"]}
     if actual_excluded != recorded_excluded or len(recorded_excluded) != len(manifest["excluded"]):
         raise ValueError("No-input exclusion reasons differ from current dataset")
     seen, group_split, image_split = set(), {}, {}
     for entry in manifest["records"]:
-        sample_id, group, split = entry["sample_id"], entry["patient_id"], entry["split"]
+        sample_id, group, split = entry["sample_id"], entry["source_group_id"], entry["split"]
         if sample_id in seen or sample_id not in by_id:
             raise ValueError("Manifest sample assignments are duplicate or unknown")
         if not group or split not in SPLITS:
@@ -184,22 +198,22 @@ def split_coverage(manifest, selected):
         assigned = [entry for entry in manifest["records"] if entry["split"] == split]
         eligible = selected[split]
         eligible_ids = {record.sample_id for record in eligible}
-        assigned_patients = {entry["patient_id"] for entry in assigned}
-        eligible_patients = {entry["patient_id"] for entry in assigned if entry["sample_id"] in eligible_ids}
+        assigned_patients = {entry["source_group_id"] for entry in assigned}
+        eligible_patients = {entry["source_group_id"] for entry in assigned if entry["sample_id"] in eligible_ids}
         result[split] = {
             "assigned_count": len(assigned), "eligible_count": len(eligible),
             "excluded_count": len(assigned) - len(eligible), "coverage": len(eligible) / len(assigned),
             "assigned_class_support": [sum(entry["label"] == label for entry in assigned) for label in range(3)],
             "eligible_class_support": [sum(record.label == label for record in eligible) for label in range(3)],
-            "assigned_patient_count": len(assigned_patients),
-            "eligible_patient_count": len(eligible_patients),
-            "fully_abstained_patient_count": len(assigned_patients - eligible_patients),
+            "assigned_source_group_count": len(assigned_patients),
+            "eligible_source_group_count": len(eligible_patients),
+            "fully_abstained_source_group_count": len(assigned_patients - eligible_patients),
         }
     return result
 
 
 def manifest_summary(manifest):
     return {split: {"record_count": len(manifest["split_ids"][split]),
-                    "patient_count": len({entry["patient_id"] for entry in manifest["records"] if entry["split"] == split}),
+                    "source_group_count": len({entry["source_group_id"] for entry in manifest["records"] if entry["split"] == split}),
                     "class_counts": dict(Counter(entry["label"] for entry in manifest["records"] if entry["split"] == split))}
             for split in SPLITS}

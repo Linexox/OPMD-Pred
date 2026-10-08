@@ -1,4 +1,4 @@
-"""Build a protocol from externally reviewed, anonymous patient identity mapping."""
+"""Build an explicitly exploratory source-name/SHA grouping protocol."""
 
 import argparse
 import json
@@ -11,7 +11,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--csv", required=True)
     parser.add_argument("--images", required=True)
-    parser.add_argument("--groups", required=True, help="Reviewed anonymous CSV: sample_id,patient_id; do not substitute sample_id for patients")
+    parser.add_argument("--groups", required=True, help="Unverified source-name candidate CSV: sample_id,candidate_patient_id,review_status")
     parser.add_argument("--output", required=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--val-fraction", type=float, default=0.15)
