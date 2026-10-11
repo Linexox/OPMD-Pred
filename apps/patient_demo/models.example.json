@@ -1,0 +1,5 @@
+{
+  "classifier": "C:/private/models/classifier.pt",
+  "encoder": "C:/private/models/dinov2_encoder.pt",
+  "device": "cpu"
+}

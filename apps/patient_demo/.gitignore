@@ -1,0 +1,8 @@
+.deps/
+models.local.json
+__pycache__/
+runtime/
+*.sqlite3
+*.pt
+*.png
+*.pdf

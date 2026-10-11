@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">口腔随访</string>
+    <string name="title_activity_main">口腔随访</string>
+    <string name="package_name">org.opmd.followup.demo</string>
+    <string name="custom_url_scheme">org.opmd.followup.demo</string>
+</resources>
