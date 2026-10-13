@@ -1,6 +1,7 @@
 ﻿param([int]$Port=8765,[string]$DataDir="$env:LOCALAPPDATA\OPMDMobileDemo")
 $ErrorActionPreference='Stop'
-$appPython='D:\.Workspace\医工\OPMD-Pred\.venv\Scripts\python.exe'
+$projectRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$appPython=Join-Path $projectRoot '.venv/Scripts/python.exe'
 $wifiAddresses = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' }
 Write-Host '手机与电脑连接同一 Wi-Fi。可用服务地址：'
 $wifiAddresses | ForEach-Object { Write-Host ($_.InterfaceAlias+' : http://'+$_.IPAddress+':'+$Port) }

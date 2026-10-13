@@ -18,3 +18,6 @@ wheels/
 
 *.rar
 *.zip
+
+/docs/
+/tmp/

@@ -57,6 +57,7 @@ def main():
     interactions = interaction_values(values, len(names))
     full_sii, intershap = intershap_summary(shapley, interactions)
     full_mask = (1 << len(names)) - 1
+    full_predictions = probabilities[:, full_mask].argmax(dim=-1)
 
     metrics = {
         coalition_name(int(coalition), names): coalition_metrics[str(coalition)]
@@ -75,6 +76,7 @@ def main():
         "global_mean_abs_full_sii_descriptive": full_sii.abs().mean(dim=0).tolist(),
         "intershap": intershap,
         "target": args.target,
+        "prediction_rule": "argmax_model_probabilities",
         "split": "val",
         "explanation_game": "observed_modalities_removed_via_mask; absent_modalities_remain_absent",
         "base_value_mean": values[:, 0].mean().item(),
@@ -86,7 +88,8 @@ def main():
     )
 
     with (output / "samples.csv").open("w", encoding="utf-8-sig", newline="") as file:
-        fieldnames = ["sample_index", "sample_id", "base_value", "model_value"]
+        fieldnames = ["sample_index", "sample_id", "base_value", "model_value",
+                      "true_label", "predicted_label", "correct", "baseline_score", "predicted_score"]
         fieldnames.extend(f"shap_{name}" for name in names)
         fieldnames.extend(
             f"interaction_{names[first]}_{names[second]}"
@@ -97,7 +100,11 @@ def main():
         writer.writeheader()
         for row_index in range(shapley.size(0)):
             row = {"sample_index": row_index, "sample_id": validation_records[row_index].sample_id,
-                   "base_value": values[row_index, 0].item(), "model_value": values[row_index, full_mask].item()}
+                   "base_value": values[row_index, 0].item(), "model_value": values[row_index, full_mask].item(),
+                   "true_label": int(labels[row_index]), "predicted_label": int(full_predictions[row_index]),
+                   "correct": int(full_predictions[row_index] == labels[row_index]),
+                   "baseline_score": values[row_index, 0].item(),
+                   "predicted_score": values[row_index, full_mask].item()}
             row.update(
                 {f"shap_{name}": float(shapley[row_index, index]) for index, name in enumerate(names)}
             )

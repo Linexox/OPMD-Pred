@@ -15,7 +15,7 @@
 双击 `D:/.Workspace/医工/启动随访Demo.cmd`，或在PowerShell执行：
 
 ```powershell
-& 'D:/.Workspace/医工/OPMD-Pred/.venv/Scripts/python.exe' -X utf8 'C:/Users/aljcn/.codex/worktrees/sysu-proxy-balanced/OPMD-Pred/apps/patient_demo/app.py'
+& 'D:/.Workspace/医工/OPMD-Pred/.venv/Scripts/python.exe' -X utf8 'D:/.Workspace/医工/OPMD-Pred/apps/patient_demo/app.py'
 ```
 
 本地档案默认写入 `%LOCALAPPDATA%/OPMDFollowupDemo`。研究依赖安装在本目录`.deps`，使用现有Python/CPU PyTorch；没有更改主项目依赖锁或训练代码。默认第一次创建“演示用户A”，它不是实际患者。

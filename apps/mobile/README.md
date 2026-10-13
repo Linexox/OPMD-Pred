@@ -38,7 +38,7 @@ Node 24、Java 21、Android SDK API36；锁定npm依赖。当前SDK位于 `D:/.W
 ./build-android.ps1
 ```
 
-APK输出：`android/app/build/outputs/apk/debug/app-debug.apk`。源码在 `codex/sysu-proxy-balanced` 分支。服务源码见同级 `mobile_service`；保持同级 `patient_demo` 及项目src可访问。
+APK输出：`android/app/build/outputs/apk/debug/app-debug.apk`。源码在 `master` 分支。服务源码见同级 `mobile_service`；保持同级 `patient_demo` 及项目src可访问。
 
 浏览器检查脚本和Android检查脚本使用当前电脑的Playwright运行时，输出独立证据目录；Android脚本控制调试WebView，系统相机/报告选择使用adb检查。它们属于工程验收，不是医生评审或真人用户试用。
 

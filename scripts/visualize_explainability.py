@@ -10,6 +10,13 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Polygon
 
 
+LABEL_NAMES = {
+    0: "normal/mild",
+    1: "moderate",
+    2: "severe",
+}
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -37,12 +44,12 @@ def draw_waterfall(row, names, output):
     order = sorted(range(len(names)), key=lambda index: abs(values[index]), reverse=True)
     labels = [names[index] for index in order]
     ordered_values = [values[index] for index in order]
-    base_value = float(row["base_value"])
-    cumulative = [base_value]
+    baseline = float(row.get("base_value", row.get("baseline_score", 0.0)))
+    cumulative = [baseline]
     for value in ordered_values:
         cumulative.append(cumulative[-1] + value)
 
-    figure, axis = plt.subplots(figsize=(10, 6.3), facecolor="#f4f6ef")
+    figure, axis = plt.subplots(figsize=(12, 6.8), facecolor="#f4f6ef")
     axis.set_facecolor("#f4f6ef")
     bar_height = 0.62
     for index, value in enumerate(ordered_values):
@@ -88,7 +95,7 @@ def draw_waterfall(row, names, output):
             ha=horizontal,
             va="center",
             color=text_color,
-            fontsize=11,
+            fontsize=14,
             fontweight="bold",
         )
         if index < len(ordered_values) - 1:
@@ -101,21 +108,36 @@ def draw_waterfall(row, names, output):
             )
 
     total = cumulative[-1]
-    axis.axvline(base_value, color="#8b9188", linestyle=(0, (1, 3)), linewidth=1)
+    axis.axvline(baseline, color="#8b9188", linestyle=(0, (1, 3)), linewidth=1)
     axis.axvline(total, color="#8b9188", linestyle=(0, (1, 3)), linewidth=1)
-    axis.text(base_value, len(labels) + 0.35, f"f(empty) = {base_value:.2f}", ha="center", va="bottom", fontsize=10)
-    axis.text(total, len(labels) + 0.35, f"f(x) = {total:+.2f}", ha="center", va="bottom", fontsize=10)
+    label_y = len(labels) - 0.15
+    baseline_x, total_x = baseline, total
+    if abs(total - baseline) < 0.06:
+        baseline_x -= 0.025
+        total_x += 0.025
+    axis.text(baseline_x, label_y, f"f(empty) = {baseline:.2f}", ha="center", va="top", fontsize=13)
+    axis.text(total_x, label_y, f"f(x) = {total:.2f}", ha="center", va="top", fontsize=13)
     axis.set_yticks(range(len(labels)), labels)
-    axis.set_xlabel("Contribution to model output", fontsize=11)
-    axis.set_title(f"Sample {row['sample_index']}  |  modality SHAP", fontsize=15, pad=28)
+    axis.set_xlabel("Contribution to model output", fontsize=14)
+    sample_title = f"Sample {row['sample_index']} | {row.get('sample_id', '')}"
+    if "true_label" in row and "predicted_label" in row:
+        true_label = int(row["true_label"])
+        predicted_label = int(row["predicted_label"])
+        status = "CORRECT" if row.get("correct", "0") == "1" else "WRONG"
+        sample_title += (
+            f" | true: {LABEL_NAMES[true_label]}"
+            f" | pred: {LABEL_NAMES[predicted_label]} | {status}"
+        )
+    sample_title += "\nmodality SHAP"
+    axis.set_title(sample_title, fontsize=14, pad=30, fontweight="bold")
     axis.grid(axis="y", color="#dfe3da", linewidth=0.7)
     axis.spines[["top", "right", "left"]].set_visible(False)
-    axis.tick_params(axis="y", length=0, labelsize=11)
-    axis.tick_params(axis="x", labelsize=10)
+    axis.tick_params(axis="y", length=0, labelsize=14)
+    axis.tick_params(axis="x", labelsize=13)
     padding = max(abs(value) for value in cumulative) * 0.16 + 0.02
     axis.set_xlim(min(cumulative) - padding, max(cumulative) + padding)
-    axis.set_ylim(len(labels) - 0.3, -0.7)
-    figure.tight_layout()
+    axis.set_ylim(len(labels) + 0.15, -0.7)
+    figure.tight_layout(rect=(0, 0.04, 1, 1))
     figure.savefig(output / f"shap_waterfall_{int(row['sample_index']):03d}.png", dpi=180)
     return figure
 
@@ -133,7 +155,7 @@ def draw_interactions(row, names, output):
     image = axis.imshow(matrix, cmap="RdBu_r", vmin=-limit, vmax=limit)
     axis.set_xticks(range(len(names)), names, rotation=35, ha="right")
     axis.set_yticks(range(len(names)), names)
-    axis.set_title(f"Sample {row['sample_index']} Shapley interactions")
+    axis.set_title(f"Sample {row['sample_index']} InterSHAP")
     for first in range(len(names)):
         for second in range(len(names)):
             axis.text(
@@ -157,7 +179,7 @@ def draw_global_interactions(summary, names, output):
     image = axis.imshow(matrix, cmap="YlOrRd")
     axis.set_xticks(range(len(names)), names, rotation=35, ha="right")
     axis.set_yticks(range(len(names)), names)
-    axis.set_title("Mean absolute Shapley interactions")
+    axis.set_title("Mean absolute InterSHAP")
     for first in range(len(names)):
         for second in range(len(names)):
             axis.text(
