@@ -155,7 +155,7 @@ def draw_interactions(row, names, output):
     image = axis.imshow(matrix, cmap="RdBu_r", vmin=-limit, vmax=limit)
     axis.set_xticks(range(len(names)), names, rotation=35, ha="right")
     axis.set_yticks(range(len(names)), names)
-    axis.set_title(f"Sample {row['sample_index']} InterSHAP")
+    axis.set_title(f"Sample {row['sample_index']} Shapley interactions")
     for first in range(len(names)):
         for second in range(len(names)):
             axis.text(
@@ -179,7 +179,7 @@ def draw_global_interactions(summary, names, output):
     image = axis.imshow(matrix, cmap="YlOrRd")
     axis.set_xticks(range(len(names)), names, rotation=35, ha="right")
     axis.set_yticks(range(len(names)), names)
-    axis.set_title("Mean absolute InterSHAP")
+    axis.set_title("Mean absolute Shapley interactions")
     for first in range(len(names)):
         for second in range(len(names)):
             axis.text(
