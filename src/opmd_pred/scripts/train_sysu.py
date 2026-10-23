@@ -82,6 +82,7 @@ def model_from_config(config):
         dimension=config["dimension"], pretrained_image=False,
         tct_categories=config["tct_categories"], image_encoder=config["image_encoder"],
         modalities=config["modalities"], head=config["head"], fusion_mode=config["fusion"],
+        dna_input_size=config.get("dna_input_size", 1),
     )
 
 

@@ -21,15 +21,15 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--summary",
-        default="outputs/tune_subset_lr1e4/explainability/summary.json",
+        default="outputs/experiments/sysu/tune_subset_lr1e4/explainability/summary.json",
     )
     parser.add_argument(
         "--samples",
-        default="outputs/tune_subset_lr1e4/explainability/samples.csv",
+        default="outputs/experiments/sysu/tune_subset_lr1e4/explainability/samples.csv",
     )
     parser.add_argument(
         "--output",
-        default="outputs/tune_subset_lr1e4/explainability/figures",
+        default="outputs/experiments/sysu/tune_subset_lr1e4/explainability/figures",
     )
     return parser.parse_args()
 

@@ -3,6 +3,7 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 export type LocalFile = { path: string; name: string; kind: 'photo' | 'report'; uploaded?: string; upload_request?: string }
 export const MobileFiles = registerPlugin<{ pickReport(): Promise<{ path: string; name: string }>; openFile(options: {path: string; mime: string}): Promise<void>; hideKeyboard(): Promise<void> }>('MobileFiles')
 const webFiles = new Map<string, string>()
+const pendingWrites = new Map<string, Promise<void>>()
 export async function putFile(data: string, name: string, kind: 'photo' | 'report'): Promise<LocalFile> {
   const path = 'pending/' + crypto.randomUUID() + '.' + (name.split('.').pop() || 'jpg').toLowerCase()
   if (Capacitor.isNativePlatform()) await Filesystem.writeFile({ path, data, directory: Directory.Data, recursive: true })
@@ -22,11 +23,25 @@ export async function readFile(file: LocalFile): Promise<string> {
   const db = await webDB(); const tx = db.transaction('files'); const r = tx.objectStore('files').get(file.path)
   const value = await new Promise<string>((resolve, reject) => { r.onsuccess = () => r.result ? resolve(r.result) : reject(new Error('草稿附件已丢失，请重新选择')); r.onerror = () => reject(r.error) }); db.close(); return value
 }
-export async function persist(key: string, value: any) {
+export function persist(key: string, value: any): Promise<void> {
   const text = JSON.stringify(value)
+  const write = (pendingWrites.get(key) || Promise.resolve()).then(() => writeSnapshot(key, text))
+  // The queue always continues after a failure; the caller still receives the error.
+  const completion = write.then(() => {}, () => {})
+  pendingWrites.set(key, completion)
+  void completion.then(() => { if (pendingWrites.get(key) === completion) pendingWrites.delete(key) })
+  return write
+}
+async function writeSnapshot(key: string, text: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
-    await Filesystem.writeFile({ path: key + '.tmp', data: text, directory: Directory.Data, encoding: Encoding.UTF8 })
-    await Filesystem.rename({ from: key + '.tmp', to: key + '.json', directory: Directory.Data })
+    const temporary = key + '.' + crypto.randomUUID() + '.tmp'
+    try {
+      await Filesystem.writeFile({ path: temporary, data: text, directory: Directory.Data, encoding: Encoding.UTF8 })
+      await Filesystem.rename({ from: temporary, to: key + '.json', directory: Directory.Data })
+    } catch (cause) {
+      await Filesystem.deleteFile({ path: temporary, directory: Directory.Data }).catch(() => {})
+      throw new Error('手机资料保存失败，请稍后重试', { cause })
+    }
   } else {
     const db = await webDB(); const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').put(text, key); await transaction(tx); db.close()
   }

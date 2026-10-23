@@ -8,6 +8,7 @@ from opmd_pred.data.sysu import MODALITIES
 class NumericEncoder(nn.Module):
     def __init__(self, input_size, output_size):
         super().__init__()
+        self.input_size = input_size
         self.network = nn.Sequential(
             nn.Linear(input_size * 2, output_size),
             nn.GELU(),
@@ -15,6 +16,8 @@ class NumericEncoder(nn.Module):
         )
 
     def forward(self, values, mask):
+        if values.shape != mask.shape or values.shape[-1] != self.input_size:
+            raise ValueError(f"Expected {self.input_size} numeric values with a matching availability mask")
         return self.network(torch.cat([values, mask.float()], dim=-1))
 
 
@@ -50,7 +53,13 @@ class MultimodalFusion(nn.Module):
         embeddings, present = {}, {}
         for name in self.names:
             if name == "image":
-                embeddings[name] = self.image_projection(self.image_encoder(batch["image"]))
+                if "image_features" in batch:
+                    features = batch["image_features"]
+                else:
+                    if self.image_encoder is None:
+                        raise ValueError("Provide image_features when the image encoder is stored separately")
+                    features = self.image_encoder(batch["image"])
+                embeddings[name] = self.image_projection(features)
                 present[name] = batch["image_present"].bool()
             elif name == "tct":
                 embeddings[name] = self.tct_encoder(batch["tct"])
@@ -104,8 +113,10 @@ class OrdinalHead(nn.Module):
 class MultimodalOrdinalModel(nn.Module):
     def __init__(self, dimension=256, pretrained_image=True, tct_categories=8,
                  image_encoder="vit_b16", modalities=MODALITIES,
-                 head="ordinal", fusion_mode="transformer"):
+                 head="ordinal", fusion_mode="transformer", dna_input_size=1):
         super().__init__()
+        if dna_input_size not in (1, 2):
+            raise ValueError("DNA input must be one legacy value or two threshold-aware values")
         self.fusion = MultimodalFusion(
             dimension=dimension,
             pretrained_image=pretrained_image,
@@ -123,6 +134,10 @@ class MultimodalOrdinalModel(nn.Module):
             name: OrdinalHead(dimension) if head == "ordinal" else nn.Linear(dimension, output_size)
             for name in self.fusion.names
         }) if fusion_mode == "late" else None
+        # Historical two-input builders replaced this layer after constructing all heads.
+        # Keep that initialization order so existing seeded training remains reproducible.
+        if dna_input_size != 1:
+            self.fusion.dna_encoder = NumericEncoder(dna_input_size, dimension)
 
     def forward(self, batch):
         embeddings, present = self.fusion.modality_embeddings(batch)

@@ -5,7 +5,7 @@ const adb='D:/.Workspace/android-sdk-opmd/platform-tools/adb.exe';
 const out=process.argv[2],stage=process.argv[3]||'setup'; fs.mkdirSync(out,{recursive:true});
 const command=(...args)=>execFileSync(adb,['-s','emulator-5554',...args],{encoding:'utf8'}).trim();
 const snap=name=>fs.writeFileSync(path.join(out,name+'.png'),execFileSync(adb,['-s','emulator-5554','exec-out','screencap','-p']));
-const token=fs.readFileSync(path.join(process.env.LOCALAPPDATA,'OPMDMobileDemo','pairing-token.txt'),'utf8').trim();
+const token=fs.readFileSync(path.resolve(__dirname,'../../../OPMDMobileDemo/pairing-token.txt'),'utf8').trim();
 (async()=>{
  command('shell','am','start','-n','org.opmd.followup.demo/.MainActivity');
  const pid=command('shell','pidof','org.opmd.followup.demo');command('forward','tcp:9227','localabstract:webview_devtools_remote_'+pid);

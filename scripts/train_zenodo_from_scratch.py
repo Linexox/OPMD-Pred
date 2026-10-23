@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument("--csv", default="data/zenodo/Imagewise_Data.csv")
     parser.add_argument("--images", default="data/zenodo/Images")
     parser.add_argument("--cache", default=None)
-    parser.add_argument("--output", default="outputs/zenodo_vit_from_scratch")
+    parser.add_argument("--output", default="outputs/experiments/zenodo/zenodo_vit_from_scratch")
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)

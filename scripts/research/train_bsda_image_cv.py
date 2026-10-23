@@ -20,7 +20,6 @@ from opmd_pred.data.sysu_protocol import file_sha256
 from opmd_pred.scripts.common import set_seed
 from opmd_pred.scripts.train_multimodal import apply_modality_dropout
 from opmd_pred.scripts.train_sysu import model_from_config as base_model_from_config
-from opmd_pred.model.fusion import NumericEncoder
 from bsda_image_token import ImageTokenBSDA, training_objective, POLICY
 
 ENCODER_SHA = '58a3fcc724155c8ecfc7bf0e955b2bf022f0e2aa4bfed06a51a5b99c850a4a65'
@@ -30,7 +29,6 @@ ENCODER_SHA = '58a3fcc724155c8ecfc7bf0e955b2bf022f0e2aa4bfed06a51a5b99c850a4a65'
 def model_from_config(config):
     require(config.get('dna_input_size') == 2, 'Use the explicit threshold-aware classifier config')
     model = base_model_from_config(config)
-    model.fusion.dna_encoder = NumericEncoder(2, config['dimension'])
     require(config.get('bsda_policy')==POLICY, 'Semantic augmentation config differs')
     model.image_bsda=ImageTokenBSDA(config['dimension'])
     return model
@@ -182,13 +180,7 @@ class Data:
 
 
 def logits(model, batch):
-    fusion = model.fusion
-    embeddings = {'image':fusion.image_projection(batch['image_features']),'tct':fusion.tct_encoder(batch['tct'])}
-    present = {'image':batch['image_present'],'tct':batch['tct_present']}
-    for name in ('history','dna','methylation'):
-        embeddings[name] = getattr(fusion,f'{name}_encoder')(batch[name],batch[f'{name}_mask'])
-        present[name] = batch[f'{name}_mask'].any(1)
-    return model.forward_from_embeddings(embeddings,present)
+    return model(batch)
 
 
 @torch.no_grad()

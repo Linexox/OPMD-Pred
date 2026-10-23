@@ -1,0 +1,9 @@
+timm==1.0.29
+torch==2.14.0
+torchvision
+numpy
+Pillow
+reportlab==5.0.1
+huggingface_hub==1.4.1
+safetensors
+PyYAML

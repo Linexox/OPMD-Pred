@@ -14,7 +14,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="data/zenodo/Imagewise_Data.csv")
     parser.add_argument("--images", default="data/zenodo/Images")
-    parser.add_argument("--output", default="outputs/zenodo_cache.pt")
+    parser.add_argument("--output", default="data/processed/zenodo/zenodo_cache.pt")
     parser.add_argument("--num-workers", type=int, default=8)
     return parser.parse_args()
 

@@ -1,0 +1,6 @@
+.deps/
+__pycache__/
+*.local.json
+models.local.json
+*.sqlite3
+*.pt

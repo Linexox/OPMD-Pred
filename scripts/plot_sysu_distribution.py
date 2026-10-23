@@ -8,7 +8,7 @@ from matplotlib import font_manager
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CSV_PATH = ROOT / "data" / "SYSU_processed" / "sysu_samples.csv"
+CSV_PATH = ROOT / "data" / "processed" / "sysu" / "legacy" / "sysu_samples.csv"
 OUTPUT_DIR = ROOT / "outputs" / "figures" / "dataset_distribution"
 MISSING = {"", "NAN", "nan", "NA", "N/A", "null", "NULL", "/", "#VALUE!"}
 HISTORY_FIELDS = (

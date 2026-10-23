@@ -15,6 +15,7 @@ wheels/
 .env.*
 /data/
 /outputs/
+/models/
 
 *.rar
 *.zip

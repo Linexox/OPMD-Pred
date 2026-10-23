@@ -14,10 +14,10 @@ from opmd_pred.scripts.common import configure_logger, device_name, set_seed
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", default="data/SYSU_processed/sysu_samples.csv")
-    parser.add_argument("--images", default="data/SYSU_processed")
+    parser.add_argument("--csv", default="data/processed/sysu/legacy/sysu_samples.csv")
+    parser.add_argument("--images", default="data/processed/sysu/legacy")
     parser.add_argument("--image-checkpoint", default="")
-    parser.add_argument("--output", default="outputs/multimodal_contrastive")
+    parser.add_argument("--output", default="outputs/experiments/sysu/multimodal_contrastive")
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)

@@ -1,0 +1,5 @@
+{
+  "classifier": "../../models/app/classifier.pt",
+  "encoder": "../../models/app/image_encoder.pt",
+  "device": "cpu"
+}

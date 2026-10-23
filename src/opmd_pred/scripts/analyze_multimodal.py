@@ -15,10 +15,10 @@ from opmd_pred.scripts.train_sysu import make_loader, read_checkpoint, restore_c
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", default="data/SYSU_processed/sysu_samples.csv")
-    parser.add_argument("--images", default="data/SYSU_processed")
+    parser.add_argument("--csv", default="data/processed/sysu/legacy/sysu_samples.csv")
+    parser.add_argument("--images", default="data/processed/sysu/legacy")
     parser.add_argument("--checkpoint", required=True)
-    parser.add_argument("--output", default="outputs/explainability")
+    parser.add_argument("--output", default="outputs/experiments/sysu/explainability")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--target", choices=["severe", "at_least_moderate", "expected_severity"], default="severe")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
