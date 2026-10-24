@@ -61,7 +61,7 @@ async function connected() {
   if (patientId.value) await refresh()
   else { visits.value = []; tasks.value = []; await persist('cache', { patients: patients.value, patientId: '', visits: [], tasks: [] }) }
 }
-async function connect() { await act(async () => { await setConnection(connectForm.url, connectForm.token); await connected(); notify('已连接电脑'); goto('mine') }) }
+async function connect() { await act(async () => { await setConnection(connectForm.url, connectForm.token); await connected(); notify('已连接'); goto('mine') }) }
 async function useDefaultConnection() { Object.assign(connectForm, defaultConnection); await connect() }
 async function addPatient() { await act(async () => { const p = await api('/api/patients', 'POST', { alias: alias.value }); patients.value = userPatients(await api('/api/patients')); patientId.value = p.id; alias.value = ''; notify('档案已建立'); page.value = 'home' }) }
 function goto(p: string) { (document.activeElement as HTMLElement)?.blur(); if(Capacitor.isNativePlatform()) MobileFiles.hideKeyboard().catch(()=>{}); error.value = ''; if (p !== 'research') clearTimeout(pollTimer); page.value = p; window.scrollTo(0, 0) }
@@ -244,7 +244,7 @@ onMounted(async () => {
     try { await connected() } catch {
       online.value = false
       const original = {...connection}
-      const candidates = [{...defaultConnection}, ...(Capacitor.isNativePlatform() && defaultConnection.token ? [{url:'http://10.0.2.2:8765', token:defaultConnection.token}] : [])]
+      const candidates = [{...defaultConnection}]
       for (const candidate of candidates) {
         if (!candidate.url || !candidate.token || candidate.url === connection.url && candidate.token === connection.token) continue
         try { await setConnection(candidate.url, candidate.token); await connected(); break } catch { online.value = false }
@@ -358,14 +358,14 @@ onMounted(async () => {
 
       <template v-if="page === 'mine'">
         <div class="page-heading"><p>资料与设置</p><h1>我的</h1></div>
-        <section class="card form-card"><div class="profile-row"><div class="avatar"><Icon name="user" /></div><div><strong>{{ activePatient?.alias || '建立匿名档案' }}</strong><p class="muted">{{ online?'电脑服务已连接':'尚未连接电脑' }}</p></div></div><label v-if="patients.length">切换档案<select v-model="patientId"><option v-for="p in patients" :value="p.id">{{ p.alias }}</option></select></label><details :open="!patients.length"><summary>新建档案</summary><label>匿名代号<input v-model="alias" placeholder="例如：小陈" /></label><button class="secondary" :disabled="busy" @click="addPatient">建立档案</button></details></section>
+        <section class="card form-card"><div class="profile-row"><div class="avatar"><Icon name="user" /></div><div><strong>{{ activePatient?.alias || '建立匿名档案' }}</strong><p class="muted">{{ online?'服务已连接':'尚未连接' }}</p></div></div><label v-if="patients.length">切换档案<select v-model="patientId"><option v-for="p in patients" :value="p.id">{{ p.alias }}</option></select></label><details :open="!patients.length"><summary>新建档案</summary><label>匿名代号<input v-model="alias" placeholder="例如：小陈" /></label><button class="secondary" :disabled="busy" @click="addPatient">建立档案</button></details></section>
 
-        <section class="card menu-card"><button @click="goto('connection')"><Icon name="link" /><span>连接设置</span><Icon name="chevron" /></button><button @click="doctorEntry"><Icon name="stethoscope" /><span>医生工作台</span><Icon name="chevron" /></button><button @click="showHelp=!showHelp"><Icon name="help" /><span>使用帮助</span><Icon name="chevron" /></button><div v-if="showHelp" class="help-copy"><p>先连接电脑服务，再准备照片和资料。没有检测报告也可以提交。</p><p>打开记录可自行分析，查看三类预测分数；医生反馈单独显示。已填写的检测数值会参与分析。</p><p>手机保留草稿，已保存记录存放在电脑。卸载前请备份资料。</p></div></section>
+        <section class="card menu-card"><button @click="goto('connection')"><Icon name="link" /><span>连接设置</span><Icon name="chevron" /></button><button @click="doctorEntry"><Icon name="stethoscope" /><span>医生工作台</span><Icon name="chevron" /></button><button @click="showHelp=!showHelp"><Icon name="help" /><span>使用帮助</span><Icon name="chevron" /></button><div v-if="showHelp" class="help-copy"><p>准备照片和资料即可开始。没有检测报告也可以提交。</p><p>打开记录可自行分析，查看三类预测分数；医生反馈单独显示。已填写的检测数值会参与分析。</p><p>手机保留草稿，已提交资料存放在服务端。</p></div></section>
         <button v-if="patientId && drafts['new:'+patientId]" class="secondary" @click="newRecord">继续未完成的记录</button>
       </template>
       <template v-if="page === 'connection'">
-        <div class="page-heading"><p>电脑服务</p><h1>连接设置</h1></div>
-        <section class="card form-card"><div class="section-title"><h2>连接电脑</h2><span class="connection-dot" :class="{connected:online}">{{ online?'已连接':'未连接' }}</span></div><p class="muted">服务地址已预填，通常无需修改。</p><label>服务地址<input v-model="connectForm.url" type="url" placeholder="http://192.168.1.5:8765" autocapitalize="off" /></label><label>连接口令<input v-model="connectForm.token" type="password" placeholder="电脑服务的连接口令" /></label><button class="primary" :disabled="busy" @click="connect">{{ busy?'正在连接…':'连接' }}<Icon name="link" /></button><button v-if="defaultConnection.url" class="text-button centered" :disabled="busy" @click="useDefaultConnection">恢复本机默认连接</button></section>
+        <div class="page-heading"><p>服务连接</p><h1>连接设置</h1></div>
+        <section class="card form-card"><div class="section-title"><h2>连接服务</h2><span class="connection-dot" :class="{connected:online}">{{ online?'已连接':'未连接' }}</span></div><p class="muted">服务地址已预填，通常无需修改。</p><label>服务地址<input v-model="connectForm.url" type="url" placeholder="http://www.ming56.cn:9020" autocapitalize="off" /></label><label>连接口令<input v-model="connectForm.token" type="password" placeholder="连接口令" /></label><button class="primary" :disabled="busy" @click="connect">{{ busy?'正在连接…':'连接' }}<Icon name="link" /></button><button v-if="defaultConnection.url" class="text-button centered" :disabled="busy" @click="useDefaultConnection">恢复默认连接</button></section>
       </template>
     </main>
     <nav v-if="['home','records','mine'].includes(page)" class="bottom-nav" aria-label="主导航"><button :class="{active:page==='home'}" @click="role='patient';goto('home')"><Icon name="home" /><span>首页</span></button><button :class="{active:page==='records'}" @click="goto('records')"><Icon name="records" /><span>记录</span></button><button class="add-tab" @click="newRecord"><b><Icon name="plus" /></b><span>新增</span></button><button :class="{active:page==='mine'}" @click="goto('mine')"><Icon name="user" /><span>我的</span></button></nav>

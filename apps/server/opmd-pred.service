@@ -1,0 +1,16 @@
+[Unit]
+Description=OPMD APP model service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/workspace/OPMD_Pred
+ExecStart=/bin/bash %h/workspace/OPMD_Pred/apps/server/launch-linux.sh
+Restart=on-failure
+RestartSec=5
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

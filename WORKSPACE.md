@@ -1,6 +1,6 @@
 # 项目工作区入口
 
-更新：2026-10-22。开发目录为 `D:/.Workspace/医工/OPMD-Pred`，本地主线为 `master`。
+更新：2026-10-24。开发目录为 `D:/.Workspace/医工/OPMD-Pred`，本地主线为 `master`。
 
 ## 目录用途
 
@@ -69,3 +69,17 @@ Android SDK在 `D:/.Workspace/android-sdk-opmd`。当前发布包固定在 `D:/.
 当前服务数据固定在 `D:/.Workspace/医工/OPMDMobileDemo`（仓库的同级目录）。服务直接启动、模拟器启动、打包发布及工程检查脚本均使用此位置。`older-local-data/` 是从C盘一并移来的4个较早文件，内容与当前数据库不同，不参与运行；未另存备份。48个文件迁移前后SHA一致。本机和公网连接、31处附件引用及公网APK下载均已核对。手机与模拟器内的安卓私有数据仍由Android管理。
 
 C盘原目录中的文件已移出，只剩空目录；工具的自动审批拒绝删除空目录，返回“blocked by policy”。当前脚本不再向该旧目录写入。证据：`outputs/checks/app/runtime-data-move-20261022/`。
+
+## Linux个人PC上的模型服务（2026-10-24）
+
+`ssh lnx`连接`nexox@www.ming56.cn:9018`，实际主机`lnx-pc`。部署目录`/home/nexox/workspace/OPMD_Pred`，Git克隆master提交`da7e3c7`并同步本地`fusion.py`未提交修正；部署相关脚本尚未提交或推送。
+
+模型仍在远程项目`models/app/`，配置为`apps/server/models.local.json`，Linux依赖在`.venv/`，已安装版本记录在`requirements-linux.lock`。启动入口`apps/server/launch-linux.sh`，用户后台服务`opmd-pred.service`，监听127.0.0.1:8765。服务enabled、用户Linger=yes；NPC原配置和SSH隧道本轮没有修改。
+
+远程运行数据显式放在项目`runtime/`：`records.sqlite3`、`attachments/`、`uploads/`、`pairing-token.txt`、`cache/`、`distribution/`及`checks/`。该目录已Git忽略，口令权限600。使用原APP口令及相同APK，首版新建空记录库，Windows旧记录仍在上文的D盘位置。
+
+用户已在NPS后台将原9020 TCP隧道切到Linux PC，内网目标127.0.0.1:8765。已通过公网核对鉴权、接口与APK下载，并在Linux日志中核对对应请求。9018为SSH、9024为NPC接入、9020为APP入口，勿混用。
+
+当前APK为1.3.7（versionCode 11），默认公网地址和原口令。升级时迁移旧本机/模拟器8765连接；不再在启动失败时自动回退到Windows服务。`launch-emulator.ps1`默认只启动模拟器与APP，使用`-LocalService`才准备Windows开发后端。新构建缓存位于D盘同级`OPMDMobileDemo/build-cache/`，没有清理C盘旧缓存。详情见`docs/daily/2026-10-24/apk-linux-connection.md`。
+
+本轮验证使用人工生成图片，确认本地与Linux预测及SHAP一致、隔离业务流程可运行、正式服务鉴权和APK下载通过。证据在`outputs/checks/deployment-lnx-20261024/`，说明在`docs/daily/2026-10-24/lnx-deployment-result.md`。其他公共训练服务器的目录未改动。

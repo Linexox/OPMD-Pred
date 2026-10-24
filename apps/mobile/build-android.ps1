@@ -3,6 +3,17 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'apk-info.ps1')
 $projectRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $dataDir=Join-Path (Split-Path $projectRoot -Parent) 'OPMDMobileDemo'
+$buildCache=Join-Path $dataDir 'build-cache'
+$env:GRADLE_USER_HOME=Join-Path $buildCache 'gradle'
+$env:ANDROID_USER_HOME=Join-Path $buildCache 'android'
+$env:npm_config_cache=Join-Path $buildCache 'npm'
+New-Item -ItemType Directory -Path $env:ANDROID_USER_HOME -Force | Out-Null
+# Keep the existing signing identity while writing new Android state on D:.
+$debugKey=Join-Path $env:ANDROID_USER_HOME 'debug.keystore'
+$existingDebugKey=Join-Path $env:USERPROFILE '.android/debug.keystore'
+if (-not (Test-Path -LiteralPath $debugKey) -and (Test-Path -LiteralPath $existingDebugKey)) {
+  Copy-Item -LiteralPath $existingDebugKey -Destination $debugKey
+}
 $env:JAVA_HOME=$Java
 $env:ANDROID_HOME=$Sdk
 $env:Path='D:\.APP\nodejs24;'+$Java+'\bin;'+$env:Path

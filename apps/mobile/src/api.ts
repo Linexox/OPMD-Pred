@@ -1,5 +1,6 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
+import { shouldRefreshConnection } from './connection-defaults'
 export type Asset = { id: string; name: string; kind: string }
 export type Visit = { id: string; patient_id: string; scenario: string; site: string; visit_date: string; symptoms: string; revision: number; status: string; task_id: string; payload: Record<string, any>; photo: Asset | null; reports: Asset[]; feedback: string; reviewer: string; quality: { messages?: string[] }; feedback_history: any[] }
 export type Task = { id: string; patient_id: string; visit_id: string; source_date: string; site: string; kind: string; note: string; due: string; status: string; requested_items: string[]; submission_id: string }
@@ -17,14 +18,23 @@ export const defaultConnection = {
   url: import.meta.env.VITE_DEMO_SERVICE_URL || '',
   token: import.meta.env.VITE_DEMO_PAIRING_TOKEN || '',
 }
+const defaultConnectionRevision = 'lnx-20261024'
 export async function restoreConnection() {
   const { value } = await Preferences.get({ key: 'connection' })
   Object.assign(connection, defaultConnection)
   if (value) { try { Object.assign(connection, JSON.parse(value)) } catch { /* Keep the packaged defaults. */ } }
+  const { value: restoredRevision } = await Preferences.get({ key: 'connection_default_revision' })
+  if (restoredRevision !== defaultConnectionRevision && defaultConnection.url && defaultConnection.token) {
+    if (shouldRefreshConnection(connection.url, defaultConnection.url)) {
+      Object.assign(connection, defaultConnection)
+      await Preferences.set({ key: 'connection', value: JSON.stringify(connection) })
+    }
+    await Preferences.set({ key: 'connection_default_revision', value: defaultConnectionRevision })
+  }
 }
 export async function setConnection(url: string, token: string) {
   connection.url = url.trim().replace(/\/$/, ''); connection.token = token.trim()
-  if (!/^https?:\/\//.test(connection.url)) throw new Error('请输入完整服务地址，如 http://192.168.1.5:8765')
+  if (!/^https?:\/\//.test(connection.url)) throw new Error('请输入完整服务地址，如 http://www.ming56.cn:9020')
   await Preferences.set({ key: 'connection', value: JSON.stringify(connection) })
 }
 export async function api<T = any>(path: string, method = 'GET', body?: any, requestId?: string): Promise<T> {

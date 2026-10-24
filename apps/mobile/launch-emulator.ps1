@@ -2,6 +2,7 @@
     [string]$Sdk='D:\.Workspace\android-sdk-opmd',
     [string]$Avd='OPMD_API36',
     [int]$Port=8765,
+    [switch]$LocalService,
     [switch]$ShowPairing
 )
 $ErrorActionPreference='Stop'
@@ -93,7 +94,7 @@ foreach ($extraDisplay in 1..3) {
 & $adb -s $serial shell wm size 1080x1920 | Out-Null
 & $adb -s $serial shell wm density 420 | Out-Null
 
-if (-not (Service-Ready)) {
+if ($LocalService -and -not (Service-Ready)) {
     if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) { throw '端口已有其他服务或连接口令不匹配，请检查原手机服务窗口。' }
     $logDir=Join-Path $dataDir 'emulator-launch'
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -109,9 +110,10 @@ if (-not (Service-Ready)) {
     }
 }
 
-# Forward only this emulator's port to the local service; no firewall change.
-& $adb -s $serial reverse ('tcp:'+$Port) ('tcp:'+$Port) | Out-Null
-if ($LASTEXITCODE) { throw '模拟器到电脑的连接建立失败。' }
+if ($LocalService) {
+    & $adb -s $serial reverse ('tcp:'+$Port) ('tcp:'+$Port) | Out-Null
+    if ($LASTEXITCODE) { throw '模拟器到电脑的连接建立失败。' }
+}
 $installed=(& $adb -s $serial shell pm path $appId | Out-String).Trim()
 $packageInfo=if ($installed) { (& $adb -s $serial shell dumpsys package $appId | Out-String) } else { '' }
 $installedCode=if ($packageInfo -match 'versionCode=(\d+)') { [int]$Matches[1] } else { 0 }
@@ -137,8 +139,8 @@ if ($apk) {
 & $adb -s $serial shell input keyevent KEYCODE_WAKEUP | Out-Null
 & $adb -s $serial shell am start -n ($appId+'/.MainActivity') | Out-Null
 if ($LASTEXITCODE) { throw 'APP打开失败。' }
-Write-Host '安卓APP已打开，将自动连接电脑服务。'
-Write-Host ('若显示未连接，在“我的 → 连接设置”填写：http://127.0.0.1:'+$Port)
+Write-Host '安卓APP已打开，默认使用安装包内的公网服务连接。'
+if ($LocalService) { Write-Host ('本机开发服务已准备好，如需使用可在“我的 → 连接设置”填写：http://127.0.0.1:'+$Port) }
 if ($ShowPairing) {
     Write-Host '连接口令（仅在本机使用）：'
     Write-Host ((Get-Content -LiteralPath $tokenPath -Raw -Encoding UTF8).Trim())

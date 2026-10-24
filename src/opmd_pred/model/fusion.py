@@ -24,14 +24,21 @@ class NumericEncoder(nn.Module):
 class MultimodalFusion(nn.Module):
     names = MODALITIES
 
-    def __init__(self, dimension=256, pretrained_image=True, tct_categories=8,
-                 image_encoder="vit_b16", modalities=MODALITIES):
+    def __init__(
+        self,
+        dimension=256,
+        pretrained_image=True,
+        tct_categories=8,
+        image_encoder="vit_b16",
+        modalities=MODALITIES
+    ):
         super().__init__()
         self.names = tuple(modalities)
         if not self.names or len(set(self.names)) != len(self.names) or not set(self.names) <= set(MODALITIES):
             raise ValueError(f"Select distinct modalities from {MODALITIES}")
-        self.image_encoder = ImageEncoder(pretrained=pretrained_image, kind=image_encoder) if "image" in self.names else None
-        self.image_projection = nn.Linear(self.image_encoder.output_dim, dimension) if self.image_encoder else None
+        
+        self.image_encoder       = ImageEncoder(pretrained=pretrained_image, kind=image_encoder) if "image" in self.names else None
+        self.image_projection    = nn.Linear(self.image_encoder.output_dim, dimension) if self.image_encoder else None
         self.history_encoder     = NumericEncoder(9, dimension)
         self.dna_encoder         = NumericEncoder(1, dimension)
         self.methylation_encoder = NumericEncoder(1, dimension)
@@ -47,7 +54,7 @@ class MultimodalFusion(nn.Module):
             norm_first=True,
         )
         self.transformer = nn.TransformerEncoder(layer, num_layers=2)
-        self.norm = nn.LayerNorm(dimension)
+        self.norm        = nn.LayerNorm(dimension)
 
     def modality_embeddings(self, batch):
         embeddings, present = {}, {}
@@ -56,18 +63,19 @@ class MultimodalFusion(nn.Module):
                 if "image_features" in batch:
                     features = batch["image_features"]
                 else:
-                    if self.image_encoder is None:
-                        raise ValueError("Provide image_features when the image encoder is stored separately")
                     features = self.image_encoder(batch["image"])
                 embeddings[name] = self.image_projection(features)
                 present[name] = batch["image_present"].bool()
+                
             elif name == "tct":
                 embeddings[name] = self.tct_encoder(batch["tct"])
                 present[name] = batch["tct_present"].bool()
+                
             else:
                 encoder = getattr(self, f"{name}_encoder")
                 embeddings[name] = encoder(batch[name], batch[f"{name}_mask"])
                 present[name] = batch[f"{name}_mask"].any(dim=1)
+        
         return embeddings, present
 
     def forward(self, batch):
@@ -111,12 +119,21 @@ class OrdinalHead(nn.Module):
 
 
 class MultimodalOrdinalModel(nn.Module):
-    def __init__(self, dimension=256, pretrained_image=True, tct_categories=8,
-                 image_encoder="vit_b16", modalities=MODALITIES,
-                 head="ordinal", fusion_mode="transformer", dna_input_size=1):
+    def __init__(
+            self,
+            dimension=256,
+            pretrained_image=True,
+            tct_categories=8,
+            image_encoder="vit_b16",
+            modalities=MODALITIES,
+            head="ordinal",
+            fusion_mode="transformer",
+            dna_input_size=1
+        ):
         super().__init__()
         if dna_input_size not in (1, 2):
             raise ValueError("DNA input must be one legacy value or two threshold-aware values")
+
         self.fusion = MultimodalFusion(
             dimension=dimension,
             pretrained_image=pretrained_image,
@@ -131,7 +148,9 @@ class MultimodalOrdinalModel(nn.Module):
         output_size = 2 if head == "corn" else 3
         self.ordinal_head = OrdinalHead(dimension) if head == "ordinal" else nn.Linear(dimension, output_size)
         self.late_heads = nn.ModuleDict({
-            name: OrdinalHead(dimension) if head == "ordinal" else nn.Linear(dimension, output_size)
+            name: OrdinalHead(dimension)
+            if head == "ordinal"
+            else nn.Linear(dimension, output_size)
             for name in self.fusion.names
         }) if fusion_mode == "late" else None
         # Historical two-input builders replaced this layer after constructing all heads.
