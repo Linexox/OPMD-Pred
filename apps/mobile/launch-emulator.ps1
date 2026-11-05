@@ -10,7 +10,7 @@ $ErrorActionPreference='Stop'
 $projectRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $adb=Join-Path $Sdk 'platform-tools/adb.exe'
 $emulator=Join-Path $Sdk 'emulator/emulator.exe'
-$dataDir=Join-Path (Split-Path $projectRoot -Parent) 'OPMDMobileDemo'
+$dataDir=Join-Path (Split-Path $projectRoot -Parent) '运行数据'
 $tokenPath=Join-Path $dataDir 'pairing-token.txt'
 $appId='org.opmd.followup.demo'
 $apkCandidates=@(
@@ -105,7 +105,7 @@ if ($LocalService -and -not (Service-Ready)) {
     Start-Process -FilePath $python -ArgumentList $serverArgs -WindowStyle Hidden -WorkingDirectory $projectRoot -RedirectStandardOutput (Join-Path $logDir ($stamp+'-stdout.log')) -RedirectStandardError (Join-Path $logDir ($stamp+'-stderr.log')) | Out-Null
     $serviceDeadline=(Get-Date).AddSeconds(30)
     while (-not (Service-Ready)) {
-        if ((Get-Date) -gt $serviceDeadline) { throw '电脑服务没有准备好，日志在本机OPMDMobileDemo/emulator-launch目录。' }
+        if ((Get-Date) -gt $serviceDeadline) { throw '电脑服务没有准备好，日志在本机运行数据/emulator-launch目录。' }
         Start-Sleep -Seconds 1
     }
 }

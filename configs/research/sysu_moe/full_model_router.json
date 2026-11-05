@@ -1,0 +1,15 @@
+{
+  "base_config": "configs/research/sysu_binary_fusion/methylation_total.json",
+  "seed": 42,
+  "assessment_test_fold": 0,
+  "expert_epochs": 7,
+  "router_epochs": 200,
+  "router_lr": 0.001,
+  "router_weight_decay": 0.01,
+  "output_root": "outputs/experiments/sysu/full-model-moe-20261104/attempt1",
+  "prepared_root": "data/processed/sysu/full-model-moe-20261104/attempt1",
+  "assessment_folds": 6,
+  "experts": 5,
+  "scope": "117 development records only; locked previous tests excluded",
+  "deployment_rule": "prepare five original-fold full experts and full-development router; no automatic APP replacement"
+}

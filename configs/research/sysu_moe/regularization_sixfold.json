@@ -1,0 +1,15 @@
+{
+  "baseline_results": "outputs/experiments/sysu/sixfold-five-expert-stability-20261104/attempt1/oof_results.json",
+  "baseline_stability_config": "configs/research/sysu_moe/sixfold_five_expert_stability.json",
+  "base_config": "configs/research/sysu_binary_fusion/methylation_total.json",
+  "output_root": "outputs/experiments/sysu/moe-regularization-20261105/attempt2",
+  "seed": 42,
+  "fusion_dropout": 0.2,
+  "expert_epochs": 7,
+  "router_epochs": 200,
+  "router_lr": 0.001,
+  "router_weight_decay": 0.01,
+  "balance_coefficient": 0.01,
+  "decision_threshold": 0.5,
+  "scope": "Same six outer folds and five complete ResNet18+TabPFN+Transformer experts; reuse original table contexts and photo caches; no selection on outer tests; APP unchanged"
+}

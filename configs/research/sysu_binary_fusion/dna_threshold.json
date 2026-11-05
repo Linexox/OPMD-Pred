@@ -1,0 +1,116 @@
+{
+  "csv": "data/processed/sysu/binary-table-fusion-20261029/attempt1/sysu_samples.csv",
+  "csv_sha256": "8139369b88defbc16a112ccfeaff1becb27bc9b01cd6e68272c3bb0689c0e1fc",
+  "protocol": "data/processed/sysu/binary-table-fusion-20261029/attempt1/development_nested_cv.json",
+  "protocol_sha256": "0f27a68a001f6e545f93561733ac533ede3a5350c82b367c0ca33929ac0c9b8a",
+  "images": {
+    "resnet18": {
+      "encoder": "outputs/experiments/zenodo/first-step-supplement/classification/resnet18/balanced/seed42/attempt1/encoder.pt",
+      "encoder_sha256": "ebdf56d6c2ee46be70a2a7ff58cbbef1b0033caec43a713aa83b92c5de59cc19",
+      "features": "data/processed/zenodo/first-step-supplement/features/resnet_balance/candidate/baseline.npz",
+      "features_sha256": "b4b2ec51f15d24bc0706a749a48ce329ea95fc430da7d6d58e6fb6c8f80bdf11",
+      "feature_dim": 512,
+      "preprocessing": {
+        "input_size": 224,
+        "resize": "aspect_preserving_pad",
+        "interpolation": "bilinear",
+        "padding_rgb": [
+          124,
+          116,
+          104
+        ],
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ]
+      }
+    },
+    "vit_b16": {
+      "encoder": "outputs/experiments/zenodo/first-step-supplement/classification/vit_b16/balanced/seed42/attempt1/encoder.pt",
+      "encoder_sha256": "c08f55eb299b6455f189e7ce32e902edd11255c04f2647620393b3376de38e7e",
+      "features": "data/processed/zenodo/first-step-supplement/features/vit_pretraining/candidate/baseline.npz",
+      "features_sha256": "461af4736ebdfbdf717d81593dff184f0063f7973d256c68904a15c8dfa29fbc",
+      "feature_dim": 768,
+      "preprocessing": {
+        "input_size": 224,
+        "resize": "aspect_preserving_pad",
+        "interpolation": "bilinear",
+        "padding_rgb": [
+          124,
+          116,
+          104
+        ],
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ]
+      }
+    }
+  },
+  "tabpfn": {
+    "csv": "data/processed/sysu/fusion-comparison-20261029/dna-quality-checked/sysu_samples.csv",
+    "protocol": "data/processed/sysu/fusion-comparison-20261029/dna-quality-checked/development_nested_cv.json",
+    "features": "data/processed/zenodo/first-step-supplement/features/resnet_balance/candidate",
+    "features_sha256": "b4b2ec51f15d24bc0706a749a48ce329ea95fc430da7d6d58e6fb6c8f80bdf11",
+    "encoder_sha256": "ebdf56d6c2ee46be70a2a7ff58cbbef1b0033caec43a713aa83b92c5de59cc19",
+    "mode": "table",
+    "tabpfn_package_version": "9.2.0",
+    "tabpfn_model_version": "TabPFN-2 (2025 Nature model)",
+    "tabpfn_weights": "data/processed/sysu/fusion-comparison-20261029/tabpfn_weights/tabpfn-v2-classifier-finetuned-zk73skhh.ckpt",
+    "tabpfn_weights_sha256": "cf8c519c01eaf1613ee91239006d57b1c806ff5f23ac1aeb1315ba1015210e49",
+    "tabpfn_HF_revision": "275f19d2add9c2c0de38f9ebaded3856599fa2e7",
+    "n_estimators": 8,
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "logistic_C": 1.0,
+    "logistic_class_weight": "balanced",
+    "pca_components_max": 16,
+    "settings_selection": "fixed before SYSU holdout evaluation; no hyperparameter search"
+  },
+  "cache_root": "data/processed/sysu/binary-table-fusion-20261029/table-branch-cache",
+  "output_root": "outputs/experiments/sysu/binary-table-fusion-20261029",
+  "lr": 0.0001,
+  "weight_decay": 0.0001,
+  "batch_size": 8,
+  "inner_epochs": 50,
+  "patience": 5,
+  "dimension": 128,
+  "state_size": 64,
+  "modality_dropout": 0.15,
+  "table_crossfit_folds": 5,
+  "fields": "genes",
+  "threshold_input": true,
+  "task_choices": [
+    "binary"
+  ],
+  "image_choices": [
+    "resnet18"
+  ],
+  "table_choices": [
+    "logistic"
+  ],
+  "fusion_choices": [
+    "transformer"
+  ],
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "photo_baselines": false
+}

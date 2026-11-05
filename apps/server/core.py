@@ -65,7 +65,8 @@ def validate_payload(payload):
     result.update(dna_count=count, dna_total=total, dna_threshold=threshold)
     result['dna_ratio'] = count / total if count is not None and total and threshold is not None else None
     result['methylation'] = number(result.get('methylation'), '甲基化总数')
-    result['tct'] = str(result.get('tct', '')).strip()
+    tct = result.get('tct')
+    result['tct'] = '' if tct is None else str(tct).strip()
     result.pop('report_confirmed', None)  # Ignore the retired confirmation flag from older APKs.
     if result.get('report_date'):
         date.fromisoformat(result['report_date'])

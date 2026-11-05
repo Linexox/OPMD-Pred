@@ -1,0 +1,2 @@
+# Keep Linux entry points runnable by bash after Windows commits.
+*.sh text eol=lf

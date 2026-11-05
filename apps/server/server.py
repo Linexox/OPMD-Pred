@@ -2,6 +2,7 @@
 import argparse
 import base64
 import hashlib
+import io
 import json
 import re
 import secrets
@@ -15,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE / '.deps' / 'api'), str(HERE)]
 import bootstrap
-from core import HISTORY, SCENARIOS, SITES, Store, digest, now
+from core import HISTORY, SCENARIOS, SITES, Store, digest, now, quality
 from inference import ResearchEngine, load_engine_config
 from explanation import compare_saved_runs, run_summary
 sys.path.insert(0, str(HERE / '.deps' / 'api'))
@@ -30,13 +31,21 @@ class ApiError(Exception):
         self.status, self.code, self.message, self.field = status, code, message, field
 
 
-def create_app(root, token, model_config):
+def create_app(root, token, model_config, research_engine=None):
     root = Path(root).resolve()
     root.mkdir(parents=True, exist_ok=True)
     (root / 'uploads').mkdir(exist_ok=True)
     lock = threading.RLock()
     pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='research')
-    engine = ResearchEngine(model_config)
+    engine = research_engine if research_engine is not None else ResearchEngine(model_config)
+
+    def require_binary_support(request):
+        if 'binary-v1' not in request.headers.get('X-Result-Formats', '').split(','):
+            raise ApiError(409, 'APP_UPDATE_REQUIRED', '请更新APP后查看此分析结果')
+
+    def guard_binary_results(request, runs):
+        if any(len((run.get('result') or {}).get('class_labels') or []) == 2 for run in runs):
+            require_binary_support(request)
 
     @contextmanager
     def store():
@@ -129,7 +138,10 @@ def create_app(root, token, model_config):
 
     @app.get('/api/health')
     def health():
-        return {'status': 'ready', 'name': '口腔随访助手', 'version': 1}
+        return {'status': 'ready', 'name': '口腔随访助手', 'version': 1,
+                'model_task': 'binary' if getattr(engine, 'requires_binary_client', False) else 'three_class',
+                'model_id': getattr(engine, 'model_id', None),
+                'capabilities': {'dna_report_unusable': bool(getattr(engine, 'supports_dna_report_unusable', False))}}
 
     @app.get('/download', response_class=HTMLResponse)
     def download_page():
@@ -181,6 +193,22 @@ def create_app(root, token, model_config):
     def visit(vid: str):
         with store() as s:
             return public_visit(s, vid)
+
+    @app.post('/api/photo-quality')
+    async def photo_quality(request: Request):
+        if int(request.headers.get('content-length', '0')) > 29_000_000:
+            raise ApiError(413, 'FILE_TOO_LARGE', '文件超过20MB，请选择较小文件')
+        body = await request.json()
+        try:
+            data = base64.b64decode(body.get('data', ''), validate=True)
+        except Exception as exc:
+            raise ValueError('照片无法读取，请重新选择原文件') from exc
+        if not data or len(data) > 20_000_000:
+            raise ApiError(413, 'FILE_TOO_LARGE', '文件为空或超过20MB')
+        try:
+            return quality(io.BytesIO(data))
+        except Exception as exc:
+            raise ValueError('照片无法检查，原图已保留，可继续填写') from exc
 
     @app.post('/api/assets')
     async def upload(request: Request):
@@ -319,10 +347,17 @@ def create_app(root, token, model_config):
 
     @app.post('/api/visits/{vid}/runs')
     async def start_run(vid: str, request: Request):
+        if getattr(engine, 'requires_binary_client', False):
+            require_binary_support(request)
         body = await request.json()
         with store() as s:
             def action():
                 snapshot = version(s, vid, body.get('revision'))
+                unavailable = snapshot['payload'].get('dna_report_unusable')
+                if unavailable is not None and not isinstance(unavailable, bool):
+                    raise ApiError(422, 'INVALID_DNA_REPORT_FLAG', 'DNA报告不可用标记格式不正确')
+                if unavailable is True and not getattr(engine, 'supports_dna_report_unusable', False):
+                    raise ApiError(409, 'DNA_EXCLUSION_UNSUPPORTED', '当前模型无法排除不合格的DNA报告')
                 pending = s.db.execute("SELECT id,status FROM mobile_jobs WHERE visit_id=? AND revision=? AND status IN ('queued','running') ORDER BY created DESC LIMIT 1",
                                        (vid, snapshot['revision'])).fetchone()
                 if pending:
@@ -335,13 +370,14 @@ def create_app(root, token, model_config):
             return mutate(s, request, body, action)
 
     @app.get('/api/runs/{jid}')
-    def job(jid: str):
+    def job(jid: str, request: Request):
         with store() as s:
             row = s.db.execute('SELECT * FROM mobile_jobs WHERE id=?', (jid,)).fetchone()
             if not row:
                 raise ApiError(404, 'RUN_NOT_FOUND', '运行记录不存在')
             result = dict(row)
             result['result'] = json.loads(result['result']) if result['result'] else None
+            guard_binary_results(request, [result])
             result['stale'] = s.visit(row['visit_id'])['revision'] != row['revision']
             return result
 
@@ -350,12 +386,14 @@ def create_app(root, token, model_config):
                 for r in s.db.execute('SELECT * FROM runs WHERE visit_id=? ORDER BY created DESC,id DESC', (vid,))]
 
     @app.get('/api/visits/{vid}/runs')
-    def history(vid: str):
+    def history(vid: str, request: Request):
         with store() as s:
-            return saved_runs(s, vid)
+            runs = saved_runs(s, vid)
+            guard_binary_results(request, runs)
+            return runs
 
     @app.get('/api/visits/{vid}/run-comparison')
-    def comparison(vid: str, current_run_id: str, previous_run_id: str = ''):
+    def comparison(vid: str, request: Request, current_run_id: str, previous_run_id: str = ''):
         with store() as s:
             s.visit(vid)
             local_runs = saved_runs(s, vid)
@@ -371,6 +409,7 @@ def create_app(root, token, model_config):
             possible = [r for r in local_runs if r['id'] != current_run_id]
             if source_visit_id and source_visit_id != vid:
                 possible += [r for r in saved_runs(s, source_visit_id) if r['revision'] == source_revision]
+            guard_binary_results(request, [current, *possible])
             possible.sort(key=lambda r: (r['created'], r['id']), reverse=True)
             comparisons = {r['id']: compare_saved_runs(current, r, source_visit_id, source_revision) for r in possible}
             candidates = [run_summary(r, comparisons[r['id']]['previous']['relation']) for r in possible if comparisons[r['id']]['status'] == 'compared']
@@ -393,7 +432,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='0.0.0.0')
     parser.add_argument('--port', type=int, default=8765)
-    parser.add_argument('--data-dir', default=str(HERE.parents[2] / 'OPMDMobileDemo'))
+    parser.add_argument('--data-dir', default=str(HERE.parents[2] / '运行数据'))
     parser.add_argument('--model-config', default=str(HERE / 'models.local.json'))
     args = parser.parse_args()
     root = Path(args.data_dir)

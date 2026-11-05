@@ -12,6 +12,14 @@ class ImageEncoder(nn.Module):
             import timm
             self.model = timm.create_model("vit_base_patch14_dinov2.lvd142m", pretrained=False, num_classes=0)
             self.output_dim = 1536
+        elif kind == "resnet18_fpn":
+            from .lesion_detector import FPNPhotoEncoder
+            self.model = FPNPhotoEncoder()
+            self.output_dim = 256
+        elif kind == "resnet18":
+            from .resnet import ResNet18Encoder
+            self.model = ResNet18Encoder(pretrained=pretrained)
+            self.output_dim = self.model.output_dim
         elif kind == "vit_b16":
             weights = ViT_B_16_Weights.IMAGENET1K_V1 if pretrained else None
             self.model = vit_b_16(weights=weights)
@@ -27,7 +35,24 @@ class ImageEncoder(nn.Module):
         return self.model(image)
 
     def load_artifact(self, path):
-        artifact = torch.load(path, map_location="cpu", weights_only=True)
+        artifact = torch.load(path, map_location='cpu', weights_only=True)
+        if artifact.get('format')=='zenodo-supplement-encoder-v1':
+            if artifact['backbone']!=self.kind or artifact['feature_dim']!=self.output_dim:
+                raise ValueError('Supplement encoder kind/dimension mismatch')
+            if self.kind=='resnet18_fpn':
+                expected={'min_size':512,'max_size':1024,'feature_layer':'3','fixed_canvas':True,
+                          'mean':[.485,.456,.406],'std':[.229,.224,.225]}
+                if any(artifact['preprocessing'].get(k)!=v for k,v in expected.items()):
+                    raise ValueError('Unexpected FPN preprocessing')
+                self.model.backbone.load_state_dict(artifact['state'],strict=True)
+            else:
+                from .resnet import PREPROCESSING
+                if artifact['preprocessing']!=PREPROCESSING:
+                    raise ValueError('Supplement photo preprocessing changed')
+                self.model.load_state_dict(artifact['state'],strict=True)
+            return artifact
+        if self.kind == "resnet18":
+            return self.model.load_artifact(path)
         if self.kind == "dinov2_b14":
             if artifact.get("model") != "vit_base_patch14_dinov2.lvd142m":
                 raise ValueError("DINO artifact model is incompatible")
@@ -52,6 +77,8 @@ class ImageEncoder(nn.Module):
         self.eval()
 
     def unfreeze_last_blocks(self, count):
+        if self.kind in {"resnet18","resnet18_fpn"} and count != 0:
+            raise ValueError("ResNet-18 does not have Transformer blocks; select its training policy explicitly")
         self.freeze()
         if count == 0:
             return

@@ -1,0 +1,21 @@
+# Current binary CPU service; direct versions checked on Linux, 2026-11-05.
+# Install matching CPU torch/torchvision first; see ../../DEPLOYMENT.md.
+torch==2.14.0
+torchvision==0.29.0
+tabpfn==9.2.0
+numpy==2.5.3
+pandas==3.0.6
+scikit-learn==1.9.1
+skrub==0.10.0
+joblib==1.5.3
+timm==1.0.29
+Pillow==12.3.0
+huggingface_hub==1.4.1
+safetensors==0.8.0
+fastapi==0.143.0
+uvicorn==0.54.0
+httpx==0.28.1
+pypdf==6.20.0
+reportlab==5.0.1
+loguru==0.7.3
+PyYAML==6.0.3

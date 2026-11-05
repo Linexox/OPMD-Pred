@@ -1,0 +1,19 @@
+{
+  "csv": "data/processed/sysu/fusion-comparison-20261029/dna-quality-checked/sysu_samples.csv",
+  "protocol": "data/processed/sysu/fusion-comparison-20261029/dna-quality-checked/development_nested_cv.json",
+  "features": "data/processed/zenodo/first-step-supplement/features/resnet_balance/candidate",
+  "features_sha256": "b4b2ec51f15d24bc0706a749a48ce329ea95fc430da7d6d58e6fb6c8f80bdf11",
+  "encoder_sha256": "ebdf56d6c2ee46be70a2a7ff58cbbef1b0033caec43a713aa83b92c5de59cc19",
+  "state_size": 64,
+  "dimension": 128,
+  "seeds": [42, 43, 44],
+  "lr": 0.0001,
+  "weight_decay": 0.0001,
+  "batch_size": 8,
+  "modality_dropout": 0.15,
+  "inner_epochs": 50,
+  "patience": 5,
+  "primary_rule": "argmax",
+  "state_change_penalty": 0.0,
+  "clinical_fields": "history9, TCT, DNA ratio and DI threshold, methylation total; no age/sex"
+}

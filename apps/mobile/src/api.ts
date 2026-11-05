@@ -9,7 +9,7 @@ export type InputContribution = { modality: ModelInputName; label: string; prese
 export type ExplanationTarget = { id: string; label: string; value: number; reference_value: number; contributions: InputContribution[]; residual: number; interactions?: { first: ModelInputName; second: ModelInputName; value: number }[] }
 export type DecisionCheck = ExplanationTarget & { threshold: number; passed: boolean }
 export type ModelExplanation = { status: 'ready' | 'failed'; reason?: string; format?: string; default_target?: string; targets?: ExplanationTarget[]; decision_checks?: DecisionCheck[]; classifier_sha256?: string; input_revision?: number; method?: string; reference?: string }
-export type ResearchResult = { status: string; reason?: string; probabilities?: number[] | null; median_class?: string; present?: Partial<Record<ModelInputName, boolean>>; explanation?: ModelExplanation; analysis_id?: string; input_revision?: number; [key: string]: unknown }
+export type ResearchResult = { status: string; reason?: string; probabilities?: number[] | null; class_labels?: string[]; median_class?: string; present?: Partial<Record<ModelInputName, boolean>>; explanation?: ModelExplanation; analysis_id?: string; input_revision?: number; [key: string]: unknown }
 export type SavedRun = { id: string; visit_id: string; revision: number; created: string; result: ResearchResult }
 export type RunSummary = { id: string; revision: number; created: string; visit_date: string; site: string; probabilities: number[]; median_class: string; relation: string }
 export type RunComparison = { status: 'compared' | 'unavailable'; reason?: string; candidates: RunSummary[]; current?: RunSummary; previous?: RunSummary; probability_deltas?: number[]; changed_inputs?: { modality: ModelInputName; label: string; kind: 'added' | 'removed' | 'changed' | 'unchanged' }[]; explanation_changes?: { target: string; label: string; contributions: { modality: ModelInputName; label: string; before: number; after: number }[] }[] }
@@ -39,7 +39,7 @@ export async function setConnection(url: string, token: string) {
 }
 export async function api<T = any>(path: string, method = 'GET', body?: any, requestId?: string): Promise<T> {
   if (!connection.url || !connection.token) throw new Error('请到“我的 → 连接设置”检查电脑连接')
-  const headers: Record<string, string> = { Authorization: `Bearer ${connection.token}` }
+  const headers: Record<string, string> = { Authorization: `Bearer ${connection.token}`, 'X-Result-Formats': 'binary-v1' }
   if (body !== undefined) { headers['Content-Type'] = 'application/json'; headers['X-Request-Id'] = requestId || crypto.randomUUID() }
   let status: number, data: any
   try {

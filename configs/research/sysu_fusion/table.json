@@ -1,0 +1,19 @@
+{
+  "csv": "data/processed/sysu/fusion-comparison-20261029/dna-quality-checked/sysu_samples.csv",
+  "protocol": "data/processed/sysu/fusion-comparison-20261029/dna-quality-checked/development_nested_cv.json",
+  "features": "data/processed/zenodo/first-step-supplement/features/resnet_balance/candidate",
+  "features_sha256": "b4b2ec51f15d24bc0706a749a48ce329ea95fc430da7d6d58e6fb6c8f80bdf11",
+  "encoder_sha256": "ebdf56d6c2ee46be70a2a7ff58cbbef1b0033caec43a713aa83b92c5de59cc19",
+  "mode": "table",
+  "tabpfn_package_version": "9.2.0",
+  "tabpfn_model_version": "TabPFN-2 (2025 Nature model)",
+  "tabpfn_weights": "data/processed/sysu/fusion-comparison-20261029/tabpfn_weights/tabpfn-v2-classifier-finetuned-zk73skhh.ckpt",
+  "tabpfn_weights_sha256": "cf8c519c01eaf1613ee91239006d57b1c806ff5f23ac1aeb1315ba1015210e49",
+  "tabpfn_HF_revision": "275f19d2add9c2c0de38f9ebaded3856599fa2e7",
+  "n_estimators": 8,
+  "seeds": [42, 43, 44],
+  "logistic_C": 1.0,
+  "logistic_class_weight": "balanced",
+  "pca_components_max": 16,
+  "settings_selection": "fixed before SYSU holdout evaluation; no hyperparameter search"
+}

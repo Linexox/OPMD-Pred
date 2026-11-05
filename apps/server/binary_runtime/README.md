@@ -1,0 +1,3 @@
+# 固定版本的二分类推理代码
+
+这是当前部署模型所使用的固定版本网络与表格推理实现，不含病例、权重或训练输出。保留独立版本以免训练代码更新改变部署计算。mean_ensemble_predictor.py将五个完整分类模型的最终概率各按20%汇总；prototype_binary_predictor.py负责每个完整模型内部的图片、TabPFN和融合计算。当前模型文件与字段清单位于models/app/binary-mean，单模型旧包models/app/binary仍保留原位置。API和记录管理在上一层apps/server。

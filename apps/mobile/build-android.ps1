@@ -2,8 +2,8 @@
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'apk-info.ps1')
 $projectRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$dataDir=Join-Path (Split-Path $projectRoot -Parent) 'OPMDMobileDemo'
-$buildCache=Join-Path $dataDir 'build-cache'
+$dataDir=Join-Path (Split-Path $projectRoot -Parent) '运行数据'
+$buildCache=Join-Path (Split-Path $projectRoot -Parent) '开发缓存'
 $env:GRADLE_USER_HOME=Join-Path $buildCache 'gradle'
 $env:ANDROID_USER_HOME=Join-Path $buildCache 'android'
 $env:npm_config_cache=Join-Path $buildCache 'npm'

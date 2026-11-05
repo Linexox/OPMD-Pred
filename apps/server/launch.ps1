@@ -1,7 +1,8 @@
 ﻿param([int]$Port=8765,[string]$DataDir='')
 $ErrorActionPreference='Stop'
+Write-Host '这是本机旧三分类开发服务；手机默认使用Linux上的二分类服务。'
 $projectRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-if (-not $DataDir) { $DataDir=Join-Path (Split-Path $projectRoot -Parent) 'OPMDMobileDemo' }
+if (-not $DataDir) { $DataDir=Join-Path (Split-Path $projectRoot -Parent) '运行数据' }
 $appPython=Join-Path $projectRoot '.venv/Scripts/python.exe'
 $wifiAddresses = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' }
 Write-Host '电脑服务地址（公网连接使用已配置的NPS地址）：'

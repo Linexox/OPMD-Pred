@@ -1,0 +1,18 @@
+{
+  "csv": "data/processed/sysu/rebuilt-20261009/sysu_samples.csv",
+  "protocol": "data/processed/sysu/rebuilt-20261009/development_nested_cv_v3.json",
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "dimension": 128,
+  "lr": 0.0001,
+  "weight_decay": 0.0001,
+  "batch_size": 8,
+  "modality_dropout": 0.15,
+  "inner_epochs": 50,
+  "patience": 5,
+  "primary_rule": "argmax",
+  "secondary_rule": "fixed_median_0.5"
+}

@@ -7,11 +7,16 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Preferences } from '@capacitor/preferences'
 import Icon from './Icon.vue'
 import ResearchExplanation from './ResearchExplanation.vue'
+import VisitComparison from './VisitComparison.vue'
+import PhotoCaptureGuide from './PhotoCaptureGuide.vue'
+import GradeScoreAxis from './GradeScoreAxis.vue'
+import { takeGuidedPhoto } from './guided-camera'
 import { api, connection, defaultConnection, photoUrl, attachmentData, restoreConnection, setConnection, type Visit, type Task, type SavedRun, type RunComparison } from './api'
 import { MobileFiles, persist, putFile, readFile, restore, type LocalFile } from './storage'
 
-type Draft = { patient_id: string; local_key?: string; id?: string; revision?: number; scenario: string; site: string; visit_date: string; symptoms: string; payload: Record<string, any>; task_id: string; files: LocalFile[]; original_photo?: any; original_reports?: any[]; step: number; save_request?: string; saved?: Visit }
+type Draft = { patient_id: string; local_key?: string; id?: string; revision?: number; scenario: string; site: string; visit_date: string; symptoms: string; payload: Record<string, any>; task_id: string; files: LocalFile[]; photo_backup?: LocalFile; original_photo?: any; original_reports?: any[]; step: number; save_request?: string; saved?: Visit }
 const page = ref('home'), busy = ref(false), error = ref(''), toast = ref(''), online = ref(false)
+const dnaReportUnusableSupported = ref(false)
 const patients = ref<{ id: string; alias: string }[]>([]), patientId = ref(''), visits = ref<Visit[]>([]), tasks = ref<Task[]>([])
 const options = reactive<{ sites: string[]; history: any[] }>({ sites: ['右舌侧缘', '左舌侧缘', '舌背', '左颊黏膜', '右颊黏膜', '牙龈', '其他（备注说明）'], history: [] })
 const current = ref<Visit | null>(null), draft = ref<Draft | null>(null), drafts = ref<Record<string, Draft>>({}), reviewDrafts = ref<Record<string, any>>({})
@@ -24,6 +29,18 @@ const entryKey = computed(() => draft.value ? draft.value.id || `new:${draft.val
 const activePatient = computed(() => patients.value.find(p => p.id === patientId.value))
 const nextTask = computed(() => tasks.value.find(t => t.status === 'pending') || tasks.value.find(t => t.status === 'submitted'))
 const recentFeedback = computed(() => visits.value.find(v => v.feedback))
+const resultClassLabels = computed(() => {
+  const result = run.value?.result
+  const probabilities = result?.probabilities
+  if (!Array.isArray(probabilities)) return []
+  const labels = result?.class_labels
+  if (Array.isArray(labels) && labels.length === probabilities.length && labels.every((x: unknown) => typeof x === 'string' && x.length > 0)) return labels as string[]
+  return probabilities.length === 3 ? ['正常/轻度', '中度', '重度'] : []
+})
+function modalityStatus(key: string | number, present: boolean): string {
+  if (present) return '已有'
+  return key === 'dna' && run.value?.result?.dna_excluded_reason === 'report_unusable' ? '未使用' : '缺失'
+}
 const today = () => new Date().toLocaleDateString('sv-SE')
 const statusText: Record<string, string> = { draft: '草稿', submitted: '等待医生', needs_more: '待补资料', reviewed: '已反馈', pending: '待补充', confirmed: '已确认', patient_reported: '自报已复诊', completed: '自报已复诊' }
 const itemText: Record<string, string> = { photo: '照片', report: '报告', history: '病史', other: '其他' }
@@ -55,7 +72,9 @@ async function refresh() {
   } catch (e: any) { online.value = false; error.value = e.message }
 }
 async function connected() {
-  await api('/api/health'); online.value = true
+  dnaReportUnusableSupported.value = false
+  const health = await api<{ capabilities?: { dna_report_unusable?: boolean } }>('/api/health')
+  dnaReportUnusableSupported.value = health.capabilities?.dna_report_unusable === true; online.value = true
   patients.value = userPatients(await api('/api/patients')); Object.assign(options, await api('/api/options'))
   if (!patients.value.some(p => p.id === patientId.value)) patientId.value = patients.value[0]?.id || ''
   if (patientId.value) await refresh()
@@ -91,17 +110,21 @@ async function acceptCamera(result: any) {
   if (!draft.value || !(result?.uri||result?.path)) throw new Error('拍摄结果未返回，草稿已保留，请重新拍照')
   const r = await Filesystem.readFile({ path: result.uri||result.path })
   const f = await putFile(r.data as string, '病损照片.' + (result.metadata?.format || result.format || 'jpg'), 'photo')
-  draft.value.files = draft.value.files.filter(f => f.kind !== 'photo').concat(f); invalidate(); await localPreview(f); await queuePersist()
+  draft.value.photo_backup = draft.value.files.find(f => f.kind === 'photo'); draft.value.files = draft.value.files.filter(f => f.kind !== 'photo').concat(f); invalidate(); await localPreview(f); await queuePersist()
 }
-async function takePhoto(source: 'camera' | 'gallery') {
+async function takePhoto(source: 'guided' | 'camera' | 'gallery') {
   await act(async () => {
     await queuePersist()
     if (!Capacitor.isNativePlatform()) { document.querySelector<HTMLInputElement>('#photo-input')?.click(); return }
     if(draft.value) await persist('active-draft', { key:draftKey(draft.value), patient_id:draft.value.patient_id, pending:true })
     try {
-      if (source === 'camera') await acceptCamera(await Camera.takePhoto({ quality: 100, includeMetadata: true, saveToGallery: false }))
+      if (source === 'guided' && Capacitor.getPlatform() === 'android') await acceptCamera(await takeGuidedPhoto())
+      else if (source === 'camera' || source === 'guided') await acceptCamera(await Camera.takePhoto({ quality: 100, includeMetadata: true, saveToGallery: false }))
       else { const r = await Camera.chooseFromGallery({ includeMetadata: true }); if (r.results[0]) await acceptCamera(r.results[0]) }
-    } catch (e: any) { if (/cancel|取消|0003/i.test(e.message || '')) { notify('已取消，草稿保留'); return }; throw new Error('相机或相册无法打开，请检查权限后重试') }
+    } catch (e: any) {
+      if (/cancel|取消|0003/i.test(e.message || '')) { notify('已取消，草稿保留'); return }
+      throw new Error(source === 'gallery' ? '无法打开相册，请检查权限后重试' : '无法打开相机，请检查权限或从相册选择')
+    }
     finally { await persist('active-draft',{pending:false}) }
   })
 }
@@ -127,11 +150,18 @@ async function openReport(r: any) {
 async function browserFiles(e: Event, kind: 'photo' | 'report') {
   const files = (e.target as HTMLInputElement).files
   if (!files || !draft.value) return
-  await act(async () => { for (const file of files) { if (file.size > 20_000_000) throw new Error('文件超过20MB'); const data = await new Promise<string>((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(',')[1]!); r.onerror = () => reject(new Error('文件无法读取')); r.readAsDataURL(file) }); const f = await putFile(data, file.name, kind); if (kind === 'photo') draft.value!.files = draft.value!.files.filter(f => f.kind !== 'photo'); draft.value!.files.push(f); await localPreview(f) }; invalidate() })
+  await act(async () => { for (const file of files) { if (file.size > 20_000_000) throw new Error('文件超过20MB'); const data = await new Promise<string>((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(',')[1]!); r.onerror = () => reject(new Error('文件无法读取')); r.readAsDataURL(file) }); const f = await putFile(data, file.name, kind); if (kind === 'photo') { draft.value!.photo_backup = draft.value!.files.find(f => f.kind === 'photo'); draft.value!.files = draft.value!.files.filter(f => f.kind !== 'photo') }; draft.value!.files.push(f); await localPreview(f) }; invalidate() })
   ;(e.target as HTMLInputElement).value = ''
 }
 const localPhoto = computed(() => draft.value?.files.find(f => f.kind === 'photo'))
 const draftPhoto = computed(() => localPhoto.value ? images[localPhoto.value.path] : draft.value?.original_photo ? images[draft.value.original_photo.id] : '')
+async function restorePhoto() {
+  if (!draft.value?.photo_backup) return
+  const previous = draft.value.photo_backup
+  draft.value.photo_backup = localPhoto.value
+  draft.value.files = draft.value.files.filter(f => f.kind !== 'photo').concat(previous)
+  invalidate(); await localPreview(previous); await queuePersist()
+}
 const taskContext = computed(() => tasks.value.find(t => t.id === draft.value?.task_id))
 function enteredInputs(visit: Visit): string[] {
   const p = visit.payload
@@ -189,7 +219,14 @@ async function research(analyze = false) {
 async function startRun() {
   if (!current.value || ['queued', 'running'].includes(run.value?.status)) return
   const visitId = current.value.id, revision = current.value.revision
-  await act(async () => { run.value = await api(`/api/visits/${visitId}/runs`, 'POST', { revision }); await pollRun(run.value.id, visitId) })
+  await act(async () => {
+    if (current.value?.payload.dna_report_unusable === true) {
+      const health = await api<{ capabilities?: { dna_report_unusable?: boolean } }>('/api/health')
+      dnaReportUnusableSupported.value = health.capabilities?.dna_report_unusable === true
+      if (!dnaReportUnusableSupported.value) throw new Error('当前服务无法排除不合格的DNA报告，请切换支持该功能的服务后再分析')
+    }
+    run.value = await api(`/api/visits/${visitId}/runs`, 'POST', { revision }); await pollRun(run.value.id, visitId)
+  })
 }
 async function pollRun(id: string, visitId: string) {
   try {
@@ -213,7 +250,7 @@ function selectRun(saved: SavedRun) {
 async function loadComparison(previousId = '') {
   const request = ++comparisonRequest
   runComparison.value = null; comparisonError.value = ''; comparisonLoading.value = false
-  if (!doctorMode.value || page.value !== 'research' || !current.value || !run.value?.record_id || run.value.status !== 'predicted') return
+  if (!doctorMode.value || page.value !== 'research' || !current.value || !run.value?.record_id || run.value.status !== 'predicted' || ![2, 3].includes(resultClassLabels.value.length)) return
   const visitId = current.value.id, recordId = run.value.record_id
   comparisonLoading.value = true
   try {
@@ -257,12 +294,12 @@ onMounted(async () => {
     await NativeApp.addListener('backButton', () => { if (page.value === 'home') NativeApp.minimizeApp(); else back() })
     await NativeApp.addListener('appStateChange', async () => { await queuePersist() })
     await NativeApp.addListener('appRestoredResult', async (r) => {
-      if(!r.success || !(r.pluginId==='Camera' || r.pluginId==='MobileFiles' && r.methodName==='pickReport'))return
+      if(!r.success || !(r.pluginId==='Camera' || r.pluginId==='GuidedCamera' || r.pluginId==='MobileFiles' && r.methodName==='pickReport'))return
       await act(async()=>{
         const active=await restore('active-draft'); const d=active?.key ? drafts.value[active.key] : null
         if(!d)throw new Error('已保留拍摄或选择结果，请重新打开对应草稿')
         patientId.value=d.patient_id;draft.value=d;goto('editor')
-        if(r.pluginId==='Camera')await acceptCamera((r.data as any)?.results?.[0]||r.data)
+        if(r.pluginId==='Camera' || r.pluginId==='GuidedCamera')await acceptCamera((r.data as any)?.results?.[0]||r.data)
         else { const value=r.data as any; const data=await Filesystem.readFile({path:value.path}); const f=await putFile(data.data as string,value.name,'report');draft.value!.files.push(f);invalidate();await queuePersist() }
         await persist('active-draft',{pending:false})
       })
@@ -325,9 +362,9 @@ onMounted(async () => {
           <details><summary>吸烟、饮酒与槟榔史<span>可稍后补充</span></summary><div v-for="prefix in ['smoking','alcohol','betel']" class="history-block"><label>{{ {smoking:'吸烟',alcohol:'饮酒',betel:'嚼槟榔'}[prefix as 'smoking'] }}<select v-model="draft.payload[prefix]" @change="invalidate"><option :value="null">暂不清楚</option><option :value="0">否</option><option :value="1">是</option></select></label><div v-if="draft.payload[prefix] === 1" class="two-fields"><label>年限（年）<input v-model="draft.payload[prefix+'_years']" type="number" min="0" @input="invalidate" /></label><label>{{ prefix==='smoking'?'支/天':prefix==='alcohol'?'ml/天':'颗/天' }}<input v-model="draft.payload[prefix+'_amount']" type="number" min="0" @input="invalidate" /></label></div></div></details>
         </section>
         <template v-if="draft.step === 1">
-          <section class="card form-card"><div class="section-title"><h2>病损照片</h2><span class="tiny-label">保留原图</span></div><div v-if="draftPhoto" class="photo-frame"><img :src="draftPhoto" alt="本次病损照片" /></div><div v-else class="photo-empty"><Icon name="camera" /><p>对准指定部位，光线充足、拍清楚</p></div><div class="two-buttons"><button class="secondary" @click="takePhoto('camera')"><Icon name="camera" />拍一张</button><button class="secondary" @click="takePhoto('gallery')">从相册选</button></div><label class="small-label">拍摄日期<input v-model="draft.payload.photo_date" type="date" @input="invalidate" /></label></section>
+          <section class="card form-card"><div class="section-title"><h2>病损照片</h2><span class="tiny-label">保留原图</span></div><div v-if="draftPhoto" class="photo-frame"><img :src="draftPhoto" alt="本次病损照片" /></div><div v-else class="photo-empty"><Icon name="camera" /><p>对准指定部位，光线充足、拍清楚</p></div><PhotoCaptureGuide :site="draft.site" :photo="localPhoto" :has-photo="!!draftPhoto" @retake="takePhoto('guided')" /><button v-if="draft.photo_backup" class="text-button" @click="restorePhoto">恢复上一张照片</button><div class="two-buttons"><button class="secondary" @click="takePhoto('guided')"><Icon name="camera" />拍一张</button><button class="secondary" @click="takePhoto('gallery')">从相册选</button></div><button v-if="Capacitor.getPlatform() === 'android'" class="text-button" @click="takePhoto('camera')">使用系统相机</button><label class="small-label">拍摄日期<input v-model="draft.payload.photo_date" type="date" @input="invalidate" /></label></section>
           <section class="card form-card"><div class="section-title"><h2>已有报告</h2><span class="tiny-label">没有也可继续</span></div><div v-for="r in draft.original_reports" class="attachment"><Icon name="file" /><span>{{ r.name }}</span><small>已保存</small></div><div v-for="(f,i) in draft.files.filter(f=>f.kind==='report')" class="attachment"><Icon name="file" /><span>{{ f.name }}</span><button class="icon-button" aria-label="移除待上传报告" @click="draft.files=draft.files.filter(x=>x.path!==f.path);invalidate()">×</button></div><button class="secondary" @click="chooseReport"><Icon name="plus" />添加报告</button>
-            <details><summary>填写检测数值<span>可由医生协助</span></summary><label>TCT意见<input v-model="draft.payload.tct" placeholder="按原报告填写" @input="invalidate" /></label><div class="two-fields"><label>DNA异常细胞数<input v-model="draft.payload.dna_count" type="number" min="0" @input="invalidate" /></label><label>总细胞数<input v-model="draft.payload.dna_total" type="number" min="0" @input="invalidate" /></label></div><label>报告DI阈值<select v-model="draft.payload.dna_threshold" @change="invalidate"><option :value="null">未填写</option><option :value="2.3">DI ≥ 2.3</option><option :value="2.5">DI ≥ 2.5</option></select></label><label>甲基化总数<input v-model="draft.payload.methylation" type="number" min="0" @input="invalidate" /></label><label>报告日期（选填）<input v-model="draft.payload.report_date" type="date" @input="invalidate" /></label><label>报告取材部位（选填）<select v-model="draft.payload.report_site" @change="invalidate"><option value="">未填写</option><option v-for="s in options.sites">{{ s }}</option></select></label><label>来源备注（选填）<textarea v-model="draft.payload.source_note" rows="2" placeholder="对应哪份报告、哪次取材" @input="invalidate" /></label></details>
+            <details><summary>填写检测数值<span>可由医生协助</span></summary><label>TCT意见<input v-model="draft.payload.tct" placeholder="按原报告填写" @input="invalidate" /></label><div class="two-fields"><label>DNA异常细胞数<input v-model="draft.payload.dna_count" type="number" min="0" @input="invalidate" /></label><label>总细胞数<input v-model="draft.payload.dna_total" type="number" min="0" @input="invalidate" /></label></div><label>报告DI阈值<select v-model="draft.payload.dna_threshold" @change="invalidate"><option :value="null">未填写</option><option :value="2.3">DI ≥ 2.3</option><option :value="2.5">DI ≥ 2.5</option></select></label><label v-if="dnaReportUnusableSupported || draft.payload.dna_report_unusable" class="check-chip"><input v-model="draft.payload.dna_report_unusable" type="checkbox" @change="invalidate" />报告注明样本不合格</label><p v-if="draft.payload.dna_report_unusable" class="mini-note">{{ dnaReportUnusableSupported ? 'DNA数值会保留，但不参与分析。' : '当前服务不支持此标记，暂不能按此条件分析。' }}</p><label>甲基化总数<input v-model="draft.payload.methylation" type="number" min="0" @input="invalidate" /></label><label>报告日期（选填）<input v-model="draft.payload.report_date" type="date" @input="invalidate" /></label><label>报告取材部位（选填）<select v-model="draft.payload.report_site" @change="invalidate"><option value="">未填写</option><option v-for="s in options.sites">{{ s }}</option></select></label><label>来源备注（选填）<textarea v-model="draft.payload.source_note" rows="2" placeholder="对应哪份报告、哪次取材" @input="invalidate" /></label></details>
           </section>
           <input id="photo-input" hidden type="file" accept="image/jpeg,image/png" @change="browserFiles($event,'photo')" /><input id="report-input" hidden type="file" accept="application/pdf,image/jpeg,image/png" multiple @change="browserFiles($event,'report')" />
         </template>
@@ -337,7 +374,8 @@ onMounted(async () => {
 
       <template v-if="(page === 'detail' || page === 'doctor') && current">
         <div class="page-heading"><p>{{ current.visit_date }} · {{ current.scenario==='self_check'?'首次自查':'随访记录' }}</p><h1>{{ current.site }}</h1><span class="status" :class="current.status">{{ statusText[current.status] }}</span></div>
-        <section class="card form-card"><div v-if="current.photo && images[current.photo.id]" class="photo-frame"><img :src="images[current.photo.id]" alt="本次病损照片" /></div><div v-else class="photo-empty"><Icon name="camera" /><p>本次尚未添加照片</p></div><p v-if="current.symptoms">{{ cleanNote(current.symptoms) }}</p><div v-for="m in current.quality.messages" class="mini-note">{{ m }}</div><button v-for="r in current.reports" class="attachment report-button" @click="openReport(r)"><Icon name="file" /><span>{{ r.name }}</span><Icon name="chevron" /></button><details><summary>查看病史与检测字段</summary><div v-for="h in options.history" class="summary-row"><span>{{ h.title }}</span><strong>{{ current.payload[h.key] ?? '未填写' }}</strong></div><div v-for="k in ['tct','dna_count','dna_total','dna_threshold','methylation','report_date','report_site','source_note']" class="summary-row"><span>{{ ({tct:'TCT',dna_count:'异常细胞数',dna_total:'总细胞数',dna_threshold:'DI阈值',methylation:'甲基化总数',report_date:'报告日期',report_site:'取材部位',source_note:'来源备注'} as Record<string,string>)[k] }}</span><strong>{{ current.payload[k] ?? '未填写' }}</strong></div></details></section>
+        <section class="card form-card"><div v-if="current.photo && images[current.photo.id]" class="photo-frame"><img :src="images[current.photo.id]" alt="本次病损照片" /></div><div v-else class="photo-empty"><Icon name="camera" /><p>本次尚未添加照片</p></div><p v-if="current.symptoms">{{ cleanNote(current.symptoms) }}</p><div v-for="m in current.quality.messages" class="mini-note">{{ m }}</div><button v-for="r in current.reports" class="attachment report-button" @click="openReport(r)"><Icon name="file" /><span>{{ r.name }}</span><Icon name="chevron" /></button><details><summary>查看病史与检测字段</summary><p v-if="current.payload.dna_report_unusable" class="mini-note">报告注明DNA样本不合格</p><div v-for="h in options.history" class="summary-row"><span>{{ h.title }}</span><strong>{{ current.payload[h.key] ?? '未填写' }}</strong></div><div v-for="k in ['tct','dna_count','dna_total','dna_threshold','methylation','report_date','report_site','source_note']" class="summary-row"><span>{{ ({tct:'TCT',dna_count:'异常细胞数',dna_total:'总细胞数',dna_threshold:'DI阈值',methylation:'甲基化总数',report_date:'报告日期',report_site:'取材部位',source_note:'来源备注'} as Record<string,string>)[k] }}</span><strong>{{ current.payload[k] ?? '未填写' }}</strong></div></details></section>
+        <details v-if="visits.some(v => v.id !== current?.id && v.patient_id === current?.patient_id)"><summary>比较两次就诊</summary><VisitComparison :current="current" :visits="visits" :images="images" /></details>
         <template v-if="page === 'detail'">
           <section v-if="current.feedback" class="card form-card"><div class="section-title"><h2>医生反馈</h2></div><p>{{ cleanNote(current.feedback) }}</p><p class="muted">{{ current.reviewer }}</p></section>
           <section v-if="current.feedback_history.length" class="card"><details><summary>以往反馈</summary><div v-for="f in current.feedback_history" class="history-feedback"><small>第{{ f.revision }}版 · {{ f.reviewed.slice(0,10) }}</small><p>{{ cleanNote(f.feedback) }}</p></div></details></section>
@@ -350,9 +388,10 @@ onMounted(async () => {
 
       <template v-if="page === 'research' && current">
         <div class="page-heading"><p>{{ current.site }} · 第{{ run?.result?.input_revision || current.revision }}版</p><h1>分析</h1></div>
-        <section v-if="run" class="card form-card"><div class="section-title"><h2>分析结果</h2><span class="tiny-label">{{ ({queued:'排队中',running:'运行中',predicted:'已完成',abstain:'未输出',failed:'失败'} as Record<string,string>)[run.status] }}</span></div><p v-if="run.stale" class="mini-note">资料已更新，这是旧版本结果。</p><p v-if="run.result?.median_class" class="prediction-label">模型预测：{{ run.result.median_class }}</p><p v-if="run.result?.probabilities" class="result-caption">三类预测分数</p><div v-if="run.result?.probabilities" class="score-list"><div v-for="(p,i) in run.result.probabilities"><div class="section-title"><span>{{ ['正常/轻度','中度','重度'][Number(i)] }}</span><strong>{{ (p*100).toFixed(1) }}%</strong></div><div class="score-track"><i :style="{width: p*100+'%'}" /></div></div></div><p v-if="run.result?.reason">{{ run.result.reason }}</p><div v-if="run.result?.present" class="modality-grid"><span v-for="(yes,k) in run.result.present" :class="{missing:!yes}">{{ ({image:'照片',history:'病史',tct:'TCT',dna:'DNA',methylation:'甲基化'} as Record<string,string>)[k] }} · {{ yes?'已有':'缺失' }}</span></div><details><summary>运行详情</summary><pre>{{ JSON.stringify(run,null,2) }}</pre></details></section>
-        <section class="card form-card"><div class="section-title"><h2>本次资料</h2><button class="icon-button" aria-label="模型适用说明" @click="showClinicalHelp=!showClinicalHelp"><Icon name="help" /></button></div><p v-if="showClinicalHelp" class="mini-note">预测正常/轻度、中度或重度。结果供就诊沟通参考，不能代替医生诊断。</p><div class="chip-group"><span v-for="name in enteredInputs(current)" :key="name" class="pill">{{ name }}</span></div><button class="primary" :disabled="busy || ['queued','running'].includes(run?.status)" @click="startRun">{{ ['queued','running'].includes(run?.status)?'正在分析…':'分析' }}<Icon name="arrow" /></button></section>
-        <ResearchExplanation v-if="doctorMode && run?.status === 'predicted' && run.result" :result="run.result" :comparison="runComparison" :loading="comparisonLoading" :error="comparisonError" @compare="loadComparison" @retry="loadComparison()" />
+        <section v-if="run" class="card form-card"><div class="section-title"><h2>分析结果</h2><span class="tiny-label">{{ ({queued:'排队中',running:'运行中',predicted:'已完成',abstain:'未输出',failed:'失败'} as Record<string,string>)[run.status] }}</span></div><p v-if="run.stale" class="mini-note">资料已更新，这是旧版本结果。</p><p v-if="run.result?.median_class" class="prediction-label">模型预测：{{ run.result.median_class }}</p><GradeScoreAxis v-if="run.status === 'predicted' && resultClassLabels.length === 2 && run.result?.grade_reference?.anchors" :score="run.result.probabilities[1]" :references="run.result.grade_reference.anchors" /><p v-if="resultClassLabels.length === 3 || resultClassLabels.length === 2 && !run.result?.grade_reference?.anchors" class="result-caption">预测分数</p><div v-if="resultClassLabels.length === 3 || resultClassLabels.length === 2 && !run.result?.grade_reference?.anchors" class="score-list"><div v-for="(p,i) in run.result.probabilities"><div class="section-title"><span>{{ resultClassLabels[Number(i)] }}</span><strong>{{ (p*100).toFixed(1) }}%</strong></div><div class="score-track"><i :style="{width: p*100+'%'}" /></div></div></div><p v-if="!resultClassLabels.length && run.result?.probabilities" class="mini-note">暂时无法显示分数，请检查结果类别。</p><p v-if="run.result?.reason">{{ run.result.reason }}</p><div v-if="run.result?.present" class="modality-grid"><span v-for="(yes,k) in run.result.present" :class="{missing:!yes}">{{ ({image:'照片',history:'病史',tct:'TCT',dna:'DNA',methylation:'甲基化'} as Record<string,string>)[k] }} · {{ modalityStatus(k, yes) }}</span></div><p v-if="run.result?.unknown_tct === true" class="mini-note">TCT填写内容与模型已识别的表述不一致，请与医生核对。</p><details><summary>运行详情</summary><pre>{{ JSON.stringify(run,null,2) }}</pre></details></section>
+        <p v-if="run?.result?.tct_check_status === 'unavailable'" class="mini-note">暂时无法核对TCT填写内容，请与医生确认。</p>
+        <section class="card form-card"><div class="section-title"><h2>本次资料</h2><button class="icon-button" aria-label="模型适用说明" @click="showClinicalHelp=!showClinicalHelp"><Icon name="help" /></button></div><p v-if="showClinicalHelp" class="mini-note">{{ resultClassLabels.length ? '预测类别：' + resultClassLabels.join('、') + '。' : '' }}结果供就诊沟通参考，不能代替医生诊断。</p><div class="chip-group"><span v-for="name in enteredInputs(current)" :key="name" class="pill">{{ name }}</span></div><button class="primary" :disabled="busy || ['queued','running'].includes(run?.status)" @click="startRun">{{ ['queued','running'].includes(run?.status)?'正在分析…':'分析' }}<Icon name="arrow" /></button></section>
+        <ResearchExplanation v-if="doctorMode && run?.status === 'predicted' && run.result && [2, 3].includes(resultClassLabels.length)" :result="run.result" :comparison="runComparison" :loading="comparisonLoading" :error="comparisonError" @compare="loadComparison" @retry="loadComparison()" />
         <section v-if="runs.length" class="card"><details><summary>历史运行记录（{{ runs.length }}）</summary><button v-for="r in runs" :key="r.id" class="saved-run-button" :class="{ selected: r.id === run?.record_id }" @click="selectRun(r)"><span>第{{ r.revision }}版 · {{ ({predicted:'已完成',abstain:'未输出',failed:'失败'} as Record<string,string>)[r.result.status] || r.result.status }}</span><small>{{ r.created.slice(0,16).replace('T',' ') }}</small></button></details></section>
       </template>
 
@@ -360,7 +399,7 @@ onMounted(async () => {
         <div class="page-heading"><p>资料与设置</p><h1>我的</h1></div>
         <section class="card form-card"><div class="profile-row"><div class="avatar"><Icon name="user" /></div><div><strong>{{ activePatient?.alias || '建立匿名档案' }}</strong><p class="muted">{{ online?'服务已连接':'尚未连接' }}</p></div></div><label v-if="patients.length">切换档案<select v-model="patientId"><option v-for="p in patients" :value="p.id">{{ p.alias }}</option></select></label><details :open="!patients.length"><summary>新建档案</summary><label>匿名代号<input v-model="alias" placeholder="例如：小陈" /></label><button class="secondary" :disabled="busy" @click="addPatient">建立档案</button></details></section>
 
-        <section class="card menu-card"><button @click="goto('connection')"><Icon name="link" /><span>连接设置</span><Icon name="chevron" /></button><button @click="doctorEntry"><Icon name="stethoscope" /><span>医生工作台</span><Icon name="chevron" /></button><button @click="showHelp=!showHelp"><Icon name="help" /><span>使用帮助</span><Icon name="chevron" /></button><div v-if="showHelp" class="help-copy"><p>准备照片和资料即可开始。没有检测报告也可以提交。</p><p>打开记录可自行分析，查看三类预测分数；医生反馈单独显示。已填写的检测数值会参与分析。</p><p>手机保留草稿，已提交资料存放在服务端。</p></div></section>
+        <section class="card menu-card"><button @click="goto('connection')"><Icon name="link" /><span>连接设置</span><Icon name="chevron" /></button><button @click="doctorEntry"><Icon name="stethoscope" /><span>医生工作台</span><Icon name="chevron" /></button><button @click="showHelp=!showHelp"><Icon name="help" /><span>使用帮助</span><Icon name="chevron" /></button><div v-if="showHelp" class="help-copy"><p>准备照片和资料即可开始。没有检测报告也可以提交。</p><p>打开记录可自行分析，查看预测分数；医生反馈单独显示。已填写的检测数值会参与分析。</p><p>手机保留草稿，已提交资料存放在服务端。</p></div></section>
         <button v-if="patientId && drafts['new:'+patientId]" class="secondary" @click="newRecord">继续未完成的记录</button>
       </template>
       <template v-if="page === 'connection'">

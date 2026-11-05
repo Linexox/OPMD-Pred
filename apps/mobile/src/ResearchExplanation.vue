@@ -6,7 +6,11 @@ const props = defineProps<{ result: ResearchResult; comparison: RunComparison | 
 const emit = defineEmits<{ compare: [previousId: string]; retry: [] }>()
 const targetId = ref('class_2')
 const names: Record<string, string> = { image: '照片', history: '病史', tct: 'TCT', dna: 'DNA', methylation: '甲基化' }
-const labels = ['正常/轻度', '中度', '重度']
+const labels = computed(() => {
+  const count = props.comparison?.current?.probabilities?.length
+  if (props.result.class_labels && props.result.class_labels.length === count) return props.result.class_labels
+  return count === 3 ? ['正常/轻度', '中度', '重度'] : []
+})
 const explanation = computed(() => props.result.explanation)
 const ready = computed(() => explanation.value?.status === 'ready' && explanation.value.format === 'modality-shap-v1')
 const target = computed(() => explanation.value?.targets?.find(t => t.id === targetId.value))
@@ -21,7 +25,7 @@ watch(() => props.result.explanation, value => { targetId.value = value?.default
 </script>
 
 <template>
-  <section class="card explanation-card">
+  <section v-if="result.class_labels?.length !== 2" class="card explanation-card">
     <div class="section-title"><h2>本次判断依据</h2><span class="tiny-label">资料贡献</span></div>
     <template v-if="ready && target">
       <div class="target-tabs" role="group" aria-label="选择解释的类别">
@@ -59,7 +63,7 @@ watch(() => props.result.explanation, value => { targetId.value = value?.default
       <label v-if="comparison.candidates.length > 1" class="comparison-select">与哪次分析对照<select :value="comparison.previous.id" @change="emit('compare', ($event.target as HTMLSelectElement).value)"><option v-for="candidate in comparison.candidates" :key="candidate.id" :value="candidate.id">{{ candidate.relation === 'material_task_source' ? '来源就诊 · ' : '' }}第{{ candidate.revision }}版 · {{ candidate.created.slice(0,16).replace('T',' ') }}</option></select></label>
       <div class="comparison-grades"><div><small>{{ comparison.previous.relation === 'material_task_source' ? '来源就诊' : '较早资料' }} · 第{{ comparison.previous.revision }}版</small><strong>{{ comparison.previous.median_class }}</strong></div><span aria-hidden="true">→</span><div><small>本次资料 · 第{{ comparison.current.revision }}版</small><strong>{{ comparison.current.median_class }}</strong></div></div>
       <div class="changed-inputs"><span v-for="item in changed" :key="item.modality">{{ changeText[item.kind] }}{{ item.label }}</span><span v-if="!changed.length">模型实际接收的资料未改变</span></div>
-      <div class="comparison-table" role="table" aria-label="补充前后三类分数">
+      <div v-if="labels.length" class="comparison-table" role="table" aria-label="补充前后预测分数">
         <div class="comparison-table-row table-head" role="row"><span role="columnheader">类别</span><span role="columnheader">之前</span><span role="columnheader">本次</span><span role="columnheader">变化</span></div>
         <div v-for="(label, index) in labels" :key="label" class="comparison-table-row" role="row"><span role="cell">{{ label }}</span><span role="cell">{{ percent(comparison.previous.probabilities[index]!) }}</span><strong role="cell">{{ percent(comparison.current.probabilities[index]!) }}</strong><span role="cell">{{ points(comparison.probability_deltas![index]!) }}</span></div>
       </div>

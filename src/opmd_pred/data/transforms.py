@@ -11,8 +11,19 @@ class DINOAspectPad:
         )
 
 
+class ResNetAspectPad:
+    def __call__(self, image):
+        return ImageOps.pad(image, (224, 224), method=Image.Resampling.BILINEAR,
+                            color=(124, 116, 104), centering=(0.5, 0.5))
+
+
 def make_image_transform(train: bool, image_encoder="vit_b16"):
-    steps = [DINOAspectPad()] if image_encoder == "dinov2_b14" else [transforms.Resize((224, 224))]
+    if image_encoder == "dinov2_b14":
+        steps = [DINOAspectPad()]
+    elif image_encoder == "resnet18":
+        steps = [ResNetAspectPad()]
+    else:
+        steps = [transforms.Resize((224, 224))]
     if train:
         steps.extend(
             [

@@ -110,12 +110,21 @@ def compare_saved_runs(current, previous, source_visit_id='', source_revision=No
         return unavailable('仅对照同次资料更新，或明确关联的补资料任务')
     if datetime.fromisoformat(previous['created']) > datetime.fromisoformat(current['created']):
         return unavailable('请选择较早完成的分析')
-    for key in ('classifier_sha256', 'image_encoder_sha256', 'rule'):
-        if not after.get(key) or after.get(key) != before.get(key):
-            return unavailable('两次使用的模型或分级规则不同，不混算资料变化的影响')
+    binary_labels = ['正常/轻度', '中度及以上']
+    is_binary = after.get('class_labels') == before.get('class_labels') == binary_labels
+    if is_binary:
+        fingerprint = after.get('model_fingerprint')
+        if not isinstance(fingerprint, str) or len(fingerprint) != 64 or any(c not in '0123456789abcdef' for c in fingerprint) or fingerprint != before.get('model_fingerprint'):
+            return unavailable('二分类模型身份不完整或不一致，暂时无法对照')
+        count = 2
+    else:
+        for key in ('classifier_sha256', 'image_encoder_sha256', 'rule'):
+            if not after.get(key) or after.get(key) != before.get(key):
+                return unavailable('两次使用的模型或分级规则不同，不混算资料变化的影响')
+        count = 3
     for result in (before, after):
         p = result.get('probabilities')
-        if not isinstance(p, list) or len(p) != 3 or not all(isinstance(v, (int, float)) and math.isfinite(v) and 0 <= v <= 1 for v in p) or abs(sum(p) - 1) > 1e-4:
+        if not isinstance(p, list) or len(p) != count or not all(isinstance(v, (int, float)) and math.isfinite(v) and 0 <= v <= 1 for v in p) or abs(sum(p) - 1) > 1e-4:
             return unavailable('历史分数不完整，无法对照')
     sa, sb = after.get('model_inputs', {}), before.get('model_inputs', {})
     if sa.get('format') != 'model-input-sha-v1' or sb.get('format') != sa['format']:

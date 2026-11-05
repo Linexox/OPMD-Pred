@@ -1,85 +1,58 @@
-# 项目工作区入口
+# 当前工作区与运行位置
 
-更新：2026-10-24。开发目录为 `D:/.Workspace/医工/OPMD-Pred`，本地主线为 `master`。
+更新：2026年11月5日。本文件只描述当前状态；旧过程见docs/worklog，不再在这里叠加历史“当前状态”。
 
-## 目录用途
+## 当前入口
 
-| 目录 | 内容 |
-|---|---|
-| apps/mobile | Vue手机界面、Android工程、APK打包及模拟器启动脚本 |
-| apps/server | 电脑服务接口、记录存储、模型推理和解释；原两套后端已合并 |
-| src/opmd_pred | 模型结构、数据处理、训练入口和分析工具 |
-| scripts/research | 实验训练、旧方法复现、错误分析及结果汇总 |
-| data/sysu | 原始医院资料，保持原位 |
-| data/zenodo | 原始公开数据，保持原位 |
-| data/processed/sysu/legacy | 较早的SYSU整理数据，原SYSU_processed目录 |
-| data/processed/sysu/rebuilt-20261009 | 依据原始资料重建的表格、选定图片、报告核查和固定划分 |
-| data/processed/zenodo | Zenodo预处理缓存 |
-| models/app | APP实际加载的分类器、图片编码器及来源说明 |
-| outputs/experiments/sysu | 医院数据各轮实验的权重、配置、日志、预测和负结果 |
-| outputs/experiments/zenodo | 后续Zenodo实验输出入口；原始数据仍在data/zenodo |
-| outputs/checks/app | APP工程检查、截图及服务日志 |
-| outputs/checks/daily | 以日期组织的私有检查证据 |
-| outputs/checks/workspace-structure-20261022 | 本次移动清单、文件SHA、路径对应表及迁移检查结果 |
-| outputs/figures | 数据分布图、架构图及解释图 |
-| docs/daily | 每日说明、结果及失败记录 |
-| docs/meetings | 会议原始材料、转写和待办；2026-10-23目录按收到材料日期存放APP参赛讨论 |
-| docs/research | 模型方法、数据核查和研究结论；内含pretraining和sysu |
-| docs/references | 文献、调研资料及参考代码；内含zenodo和research |
-| docs/product | 产品方案、比赛材料、HTML报告、截图及PDF |
-| tmp | 保留的旧过程文件、草稿及Git快照；用户已取消删除 |
-| .venv | Python环境；optional下存放已有绘图工具依赖 |
-| .agents/skills | 项目专用操作规范 |
-| .github/modernize | Java升级工具辅助脚本 |
-| .git | Git历史和分支信息 |
+- 唯一开发仓库：D:/.Workspace/医工/OPMD-Pred（实际路径见下表），分支master。模型与APP在同一仓库，分别维护。
+- 人可直接使用的产物：仓库上级的交付成果。最新安装包为APP/口腔随访-1.3.8.apk。
+- 线上APP使用五个完整ResNet-18＋TabPFN＋Transformer二分类模型，各占20%汇总概率；分类网络训练Dropout为0.1，不使用Router。结果页参考点来自这套结构的六折留出分数。
+- Windows本机launch.ps1仍启动旧三分类开发服务；它没有安装线上全部二分类依赖，不应与线上成绩混称。
 
-## APP运行入口
+| 用途 | 当前路径 |
+| --- | --- |
+| 开发代码 | D:/.Workspace/医工/OPMD-Pred |
+| APP前端、Android工程 | apps/mobile |
+| API、记录管理与部署启动 | apps/server |
+| 固定版本二分类推理实现 | apps/server/binary_runtime；不含模型或患者附件 |
+| 模型结构与训练组件 | src/opmd_pred |
+| 训练和复现脚本 | scripts/research；保留当前五模型及其图片编码器训练入口 |
+| 当前五模型二分类私有模型包 | models/app/binary-mean；manifest.json列出五个成员及固定20%权重 |
+| 切换前单模型二分类包 | models/app/binary；保留原位置用于恢复，不是当前主模型 |
+| 旧三分类权重 | models/app/classifier.pt、image_encoder.pt；本机models.local.json仍引用它们 |
+| 原始数据接收目录 | ../DATASETS；当前data/sysu、data/zenodo及历史数据暂保留，未做删除去重 |
+| 整理后的研究数据 | data/processed/sysu；原始病理、图片和就诊关联仍需按研究记录核对 |
+| 实验权重、预测、配置及失败结果 | outputs/experiments |
+| 工程检查与文件迁移记录 | outputs/checks；本次共享整理为workspace-review-20261105 |
+| 可直接阅读的报告与比赛材料 | ../交付成果 |
+| AI工作流水和每日尝试 | docs/worklog |
+| 论文原文和第三方参考源码 | ../papers/原文、../papers/参考代码 |
+| 历史源码与获奖原件 | ../历史项目；未经确认不删除 |
+| Windows运行库、附件、口令、固定APK副本 | ../运行数据 |
+| Gradle、npm等构建缓存 | ../开发缓存；android/debug.keystore是签名密钥，不能随缓存清理 |
 
-项目上一级目录的“启动手机APP服务.cmd”和“启动安卓APP模拟器.cmd”继续使用，均已指向新服务路径。Python使用本项目 `.venv`。
+## 启动与安装
 
-服务：`apps/server/server.py`；启动脚本：`apps/server/launch.ps1`；本机模型配置：`apps/server/models.local.json`。模型路径采用相对于配置文件的写法：
+项目上一级“启动安卓APP模拟器.cmd”指向apps/mobile/launch-emulator.ps1，默认连接公网模型服务；使用-LocalService才准备Windows开发后端。“启动手机APP服务.cmd”指向apps/server/launch.ps1。
 
-- `models/app/classifier.pt`：SYSU seed42基线fold0分类器的部署版本。
-- `models/app/image_encoder.pt`：Zenodo-DINOv2图片编码器。
+APK构建入口apps/mobile/build-android.ps1；固定分发副本为../运行数据/distribution/app-debug.apk。模拟器优先读取此副本，再读取Android工程构建输出。构建缓存、附件和新运行数据均放D盘，不默认写C盘用户目录。Android SDK仍在D:/.Workspace/android-sdk-opmd，AVD位置本次不变。
 
-对应实验分类器仍保留在 `outputs/experiments/sysu/raw-rebuild-20261009/completed_evidence/runs/seed42/fold0/baseline/refit/classifier.pt`，用于实验复现。更换部署模型应同时更新来源说明及推理接口内的SHA校验。
+## Linux线上服务
 
-手机服务运行数据在仓库外 `D:/.Workspace/医工/OPMDMobileDemo`：records.sqlite3为记录，attachments/uploads为附件，distribution为APK分发副本，pairing-token.txt为口令。旧桌面资料 `%LOCALAPPDATA%/OPMDFollowupDemo` 不作为手机服务数据入口。
+ssh lnx连接个人PC，部署根目录/home/nexox/workspace/OPMD_Pred。后台服务opmd-pred.service，入口apps/server/launch-linux.sh，runtime/model-mode.txt为binary时调用binary_linux_service.py。
 
-Android SDK在 `D:/.Workspace/android-sdk-opmd`。当前发布包固定在 `D:/.Workspace/医工/OPMDMobileDemo/distribution/app-debug.apk`，手机下载安装和模拟器均使用此包。项目上一级目录的日期APK是当时的导出文件。此次整理不改变手机服务端口、配对口令、数据库结构或模型内容。
+当前正式模型清单为models/app/binary-mean/manifest.json，包含五份独立融合权重、25份TabPFN参考、共享编码器和基础权重。五个成员分别使用原五分组中的四组训练，覆盖117份开发资料，不按最好测试折选权重。集成实现为apps/server/binary_runtime/mean_ensemble_predictor.py，复用已固定的单模型计算。模型内表格参考包含训练上下文，整个包仅限服务端，不进APK或公开下载。
 
-## 文件管理
+runtime/binary-model-manifest.txt选择活动清单，当前为models/app/binary-mean/manifest.json；需要恢复时可改为models/app/binary/manifest.json再重启本项目服务。默认启动也采用五模型清单。五模型对照的六折平均准确率75.62%是结构评价，最终部署组合使用更多开发训练资料，不把训练资料上的成绩作为独立验证。
 
-源码与非私密配置可提交Git。data、models、outputs、docs、tmp及本机模型配置、依赖和构建产物均已忽略；Git不会自动保存这些本地资料。归档或另存备份须先征得用户同意。
+Linux运行数据库、附件、口令、下载包仍在该项目runtime，未迁移用户记录；Python环境和已有隔离依赖目录保留。公网APP入口www.ming56.cn:9020；9018是SSH，9024是NPC连接端口。此次没有改NPS/NPC配置或公网地址。
 
-本次为按用途移动文件，未创建归档或备份。用户已删除的三个外部归档不能再作为恢复入口。历史实验原始配置和日志内的旧路径保持为当时记录，新位置可查 `outputs/checks/workspace-structure-20261022/path-map.json`；当前源码和文档链接已更新。
+## 管理约定
 
-服务器上的项目目录与文件未改动；本次只整理本机，不能据此推断远程文件与本机一致。
+组员共享与最小部署见[DEPLOYMENT.md](DEPLOYMENT.md)。它随Git提供，分别说明连接现有服务与独立部署；本机绝对路径仅是当前维护电脑的位置。
 
-## 当前脚本和文件保留决定
+源码与非私密配置可由Git管理；docs、data、models、outputs、本地配置和凭据目前被忽略。Git克隆不会带来部署模型或口令；本次整理不等于完成资料备份。
 
-“启动手机APP服务.cmd”指向apps/server/launch.ps1；模拟器启动脚本调用apps/server/server.py。模型配置位于apps/server/models.local.json，引用models/app。
+成品只有交付成果中的一个编辑来源；固定APK分发副本因服务需要保留。文件迁移清单位于outputs/checks/workspace-organization-20261103/moves.json。历史实验内部命令和校验记录保留当时路径，必要时对照迁移清单，不批量改写原始实验证据。
 
-打包脚本默认使用公网地址http://www.ming56.cn:9020，也可通过-ServiceUrl指定其他地址。构建成功后自动更新固定发布包及其版本说明。模拟器优先读取固定发布包，按APK实际版本和文件校验值判断是否更新，不再固定引用旧日期安装包。
-
-用户已决定不删除先前列出的65个文件。它们保留原位，没有另存副本；旧apps/mobile_service、apps/patient_demo只有缓存，实际服务源码为apps/server。清理清单的执行许可已撤销，旧清理脚本会停止执行。
-
-## 电脑运行数据迁移（2026-10-22）
-
-当前服务数据固定在 `D:/.Workspace/医工/OPMDMobileDemo`（仓库的同级目录）。服务直接启动、模拟器启动、打包发布及工程检查脚本均使用此位置。`older-local-data/` 是从C盘一并移来的4个较早文件，内容与当前数据库不同，不参与运行；未另存备份。48个文件迁移前后SHA一致。本机和公网连接、31处附件引用及公网APK下载均已核对。手机与模拟器内的安卓私有数据仍由Android管理。
-
-C盘原目录中的文件已移出，只剩空目录；工具的自动审批拒绝删除空目录，返回“blocked by policy”。当前脚本不再向该旧目录写入。证据：`outputs/checks/app/runtime-data-move-20261022/`。
-
-## Linux个人PC上的模型服务（2026-10-24）
-
-`ssh lnx`连接`nexox@www.ming56.cn:9018`，实际主机`lnx-pc`。部署目录`/home/nexox/workspace/OPMD_Pred`，Git克隆master提交`da7e3c7`并同步本地`fusion.py`未提交修正；部署相关脚本尚未提交或推送。
-
-模型仍在远程项目`models/app/`，配置为`apps/server/models.local.json`，Linux依赖在`.venv/`，已安装版本记录在`requirements-linux.lock`。启动入口`apps/server/launch-linux.sh`，用户后台服务`opmd-pred.service`，监听127.0.0.1:8765。服务enabled、用户Linger=yes；NPC原配置和SSH隧道本轮没有修改。
-
-远程运行数据显式放在项目`runtime/`：`records.sqlite3`、`attachments/`、`uploads/`、`pairing-token.txt`、`cache/`、`distribution/`及`checks/`。该目录已Git忽略，口令权限600。使用原APP口令及相同APK，首版新建空记录库，Windows旧记录仍在上文的D盘位置。
-
-用户已在NPS后台将原9020 TCP隧道切到Linux PC，内网目标127.0.0.1:8765。已通过公网核对鉴权、接口与APK下载，并在Linux日志中核对对应请求。9018为SSH、9024为NPC接入、9020为APP入口，勿混用。
-
-当前APK为1.3.7（versionCode 11），默认公网地址和原口令。升级时迁移旧本机/模拟器8765连接；不再在启动失败时自动回退到Windows服务。`launch-emulator.ps1`默认只启动模拟器与APP，使用`-LocalService`才准备Windows开发后端。新构建缓存位于D盘同级`OPMDMobileDemo/build-cache/`，没有清理C盘旧缓存。详情见`docs/daily/2026-10-24/apk-linux-connection.md`。
-
-本轮验证使用人工生成图片，确认本地与Linux预测及SHAP一致、隔离业务流程可运行、正式服务鉴权和APK下载通过。证据在`outputs/checks/deployment-lnx-20261024/`，说明在`docs/daily/2026-10-24/lnx-deployment-result.md`。其他公共训练服务器的目录未改动。
+此前经用户确认的248个源码文件已删除，执行范围见../交付成果/代码精简审阅清单.md。本次Git对象整理保留分支及提交引用；源码残留缓存和空目录的删除被自动审批拒绝，未执行，具体目录在outputs/checks/workspace-review-20261105/source-cache-cleanup.json。Zenodo、原始数据、部署模型、实验结果和运行数据库保持原位置。

@@ -1,0 +1,14 @@
+{
+  "base_config": "configs/research/sysu_binary_fusion/methylation_total.json",
+  "seed": 42,
+  "experts": 4,
+  "expert_epochs": 7,
+  "router_epochs": 200,
+  "router_lr": 0.001,
+  "router_weight_decay": 0.01,
+  "output_root": "outputs/experiments/sysu/four-expert-original-fivefold-20261104/attempt1",
+  "prepared_root": "data/processed/sysu/four-expert-original-fivefold-20261104/attempt1",
+  "app_baseline_root": "outputs/experiments/sysu/binary-table-fusion-20261029/total_mixed_di/binary/resnet18/tabpfn/transformer/seed42/attempt1",
+  "protocol": "original five outer folds; four complete experts each train on three of the other four folds",
+  "scope": "117 development records only; no locked previous tests; no APP replacement"
+}

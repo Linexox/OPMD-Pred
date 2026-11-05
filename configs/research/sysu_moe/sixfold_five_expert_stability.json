@@ -1,0 +1,11 @@
+{
+  "initial_config": "configs/research/sysu_moe/full_model_router.json",
+  "initial_result_root": "outputs/experiments/sysu/full-model-moe-20261104/attempt1",
+  "initial_partition_file": "data/processed/sysu/full-model-moe-20261104/attempt1/partitions.json",
+  "recorded_fourth_fold_summary": "outputs/checks/daily/2026-10-30/fourth-fold/summary.json",
+  "output_root": "outputs/experiments/sysu/sixfold-five-expert-stability-20261104/attempt1",
+  "prepared_root": "data/processed/sysu/sixfold-five-expert-stability-20261104/attempt1",
+  "reuse_initial_test_fold": 0,
+  "additional_test_folds": [1, 2, 3, 4, 5],
+  "scope": "same six outer partitions as first experiment; five complete experts; no hyperparameter changes or APP replacement"
+}
