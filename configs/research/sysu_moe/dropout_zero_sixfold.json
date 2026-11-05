@@ -1,0 +1,11 @@
+{
+  "baseline_results": "outputs/experiments/sysu/sixfold-five-expert-stability-20261104/attempt1/oof_results.json",
+  "partition_file": "data/processed/sysu/full-model-moe-20261104/attempt1/partitions.json",
+  "base_config": "configs/research/sysu_binary_fusion/methylation_total.json",
+  "output_root": "outputs/experiments/sysu/dropout-zero-20261105/attempt1",
+  "seed": 42,
+  "fusion_dropout": 0.0,
+  "expert_epochs": 7,
+  "decision_threshold": 0.5,
+  "scope": "Same six held-out folds, five complete models each weighted 20%; change Transformer training dropout only; no Router; APP unchanged"
+}
