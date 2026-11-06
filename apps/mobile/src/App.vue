@@ -23,6 +23,9 @@ const patients = ref<{ id: string; alias: string }[]>([]), patientId = ref(''), 
 const options = reactive<{ sites: string[]; history: any[] }>({ sites: ['右舌侧缘', '左舌侧缘', '舌背', '左颊黏膜', '右颊黏膜', '牙龈', '其他（备注说明）'], history: [] })
 const current = ref<Visit | null>(null), draft = ref<Draft | null>(null), drafts = ref<Record<string, Draft>>({}), reviewDrafts = ref<Record<string, any>>({})
 const review = ref<any>({ reviewer: '', feedback: '', requested_items: [], material_note: '', due: '', task_note: '' })
+const reviewSent = ref(false)
+const wantFollowup = ref(false)
+const doctorRunOpen = ref(false)
 const run = ref<any>(null), runs = ref<SavedRun[]>([]), images = reactive<Record<string, string>>({})
 const runComparison = ref<RunComparison | null>(null), comparisonLoading = ref(false), comparisonError = ref('')
 const connectForm = reactive({ url: '', token: '' }), alias = ref(''), role = ref('patient'), showHelp = ref(false), showClinicalHelp = ref(false), savingDraft = ref(false)
@@ -60,7 +63,7 @@ function queuePersist() {
   return persistQueue
 }
 watch(draft, (v) => { if (v) { drafts.value[draftKey(v)] = JSON.parse(JSON.stringify(v)); queuePersist() } }, { deep: true })
-watch(review, (v) => { if (current.value && page.value === 'doctor') { reviewDrafts.value[current.value.id] = JSON.parse(JSON.stringify(v)); queuePersist() } }, { deep: true })
+watch(review, (v) => { if (current.value && page.value === 'doctor') { reviewSent.value = false; reviewDrafts.value[current.value.id] = JSON.parse(JSON.stringify(v)); queuePersist() } }, { deep: true })
 watch(patientId, async (id, previous) => { if (id && id !== previous) { await Preferences.set({ key: 'patient', value: id }); await refresh() } })
 async function act(fn: () => Promise<any>) { if (busy.value) return; (document.activeElement as HTMLElement)?.blur(); if(Capacitor.isNativePlatform()) MobileFiles.hideKeyboard().catch(()=>{}); busy.value = true; error.value = ''; try { return await fn() } catch (e: any) { error.value = e.message || '操作失败'; await nextTick(); document.querySelector<HTMLElement>('.error')?.focus() } finally { busy.value = false } }
 async function refresh() {
@@ -94,7 +97,7 @@ function newRecord() {
   goto('editor')
 }
 async function openVisit(v: Visit, doctor = false) {
-  await act(async () => { current.value = await api<Visit>(`/api/visits/${v.id}`); if (doctor) { role.value = 'doctor'; review.value = reviewDrafts.value[v.id] || { reviewer: '', feedback: '', requested_items: [], material_note: '', due: '', task_note: '' }; goto('doctor') } else goto('detail') })
+  await act(async () => { current.value = await api<Visit>(`/api/visits/${v.id}`); if (doctor) { role.value = 'doctor'; reviewSent.value = false; doctorRunOpen.value = false; review.value = reviewDrafts.value[v.id] || { reviewer: '', feedback: '', requested_items: [], material_note: '', due: '', task_note: '' }; wantFollowup.value = !!(review.value.due || review.value.task_note); goto('doctor') } else goto('detail') })
 }
 function editVisit(v: Visit) {
   draft.value = drafts.value[v.id] || { patient_id: v.patient_id, id: v.id, revision: v.revision, scenario: v.scenario, site: v.site, visit_date: v.visit_date, symptoms: v.symptoms, payload: { ...v.payload }, task_id: v.task_id, files: [], original_photo: v.photo, original_reports: v.reports, step: 0 }
@@ -212,20 +215,39 @@ async function saveRecord(submit = false, analyze = false) {
   if (saved && analyze) await research(true)
 }
 async function submitExisting() { await act(async () => { const v = current.value!; current.value = await api(`/api/visits/${v.id}/submissions`, 'POST', { revision: v.revision }); await refresh(); notify('已提交') }) }
+const ITEM_LABEL: Record<string, string> = { photo: '补拍照片', report: '补充检查报告', history: '补充既往史', other: '补充其他资料' }
+const notePlaceholder = computed(() => review.value.requested_items.includes('photo')
+  ? '例如：照片不清晰，请重新拍摄；拍摄时把舌头伸出来，光线亮一些'
+  : '例如：补右侧舌缘的照片，注明拍摄日期')
+function composeFeedback(): string {
+  const parts: string[] = review.value.requested_items.map((i: string) => ITEM_LABEL[i]).filter(Boolean)
+  if (wantFollowup.value) parts.push(review.value.due ? `建议 ${review.value.due} 复诊` : '建议线下复诊')
+  const note = String(review.value.material_note || '').trim()
+  if (note) parts.push(note)
+  const taskNote = String(review.value.task_note || '').trim()
+  if (taskNote) parts.push(taskNote)
+  return parts.filter(Boolean).join('；')
+}
 async function sendReview() {
-  await act(async () => { const v = current.value!; current.value = await api(`/api/visits/${v.id}/reviews`, 'POST', { revision: v.revision, ...review.value }); delete reviewDrafts.value[v.id]; await queuePersist(); await refresh(); notify('反馈已保存'); goto('detail') })
+  const feedback = composeFeedback()
+  if (!feedback) { error.value = '请至少勾选一项需要患者做的事，或写一句说明'; return }
+  await act(async () => { const v = current.value!; current.value = await api(`/api/visits/${v.id}/reviews`, 'POST', { revision: v.revision, ...review.value, feedback }); delete reviewDrafts.value[v.id]; reviewSent.value = true; await queuePersist(); await refresh(); notify('反馈已发送，患者会看到') })
+}
+async function loadRuns() {
+  if (!current.value) return
+  runs.value = await api<SavedRun[]>(`/api/visits/${current.value.id}/runs`)
+  const previous = runs.value[0]
+  if (previous) selectRun(previous); else run.value = null
 }
 async function research(analyze = false) {
   if (!current.value) return
   researchOrigin.value = page.value === 'doctor' ? 'doctor' : 'detail'
-  await act(async () => {
-    runs.value = await api<SavedRun[]>(`/api/visits/${current.value!.id}/runs`)
-    const previous = runs.value[0]
-    if (previous) selectRun(previous)
-    else run.value = null
-    goto('research')
-  })
+  await act(async () => { await loadRuns(); goto('research') })
   if (analyze && page.value === 'research') await startRun()
+}
+async function toggleDoctorRun() {
+  doctorRunOpen.value = !doctorRunOpen.value
+  if (doctorRunOpen.value) await act(loadRuns)
 }
 async function startRun() {
   if (!current.value || ['queued', 'running'].includes(run.value?.status)) return
@@ -380,12 +402,13 @@ onMounted(async () => {
           <input id="photo-input" hidden type="file" accept="image/jpeg,image/png" @change="browserFiles($event,'photo')" /><input id="report-input" hidden type="file" accept="application/pdf,image/jpeg,image/png" multiple @change="browserFiles($event,'report')" />
         </template>
         <section v-if="draft.step === 2" class="card form-card"><div class="summary-row"><span>部位</span><strong>{{ draft.site }}</strong></div><div class="summary-row"><span>日期</span><strong>{{ draft.visit_date }}</strong></div><div class="summary-row"><span>照片</span><strong>{{ localPhoto || draft.original_photo ? '已添加' : '尚未添加' }}</strong></div><div class="summary-row"><span>报告</span><strong>{{ (draft.original_reports?.length || 0)+draft.files.filter(f=>f.kind==='report').length }}份</strong></div><p class="summary-note">{{ draft.symptoms || '暂无补充说明' }}</p><div v-if="taskContext" class="mini-note">本次提交关联：{{ taskContext.site }} · {{ taskContext.source_date }}</div></section>
-        <div class="editor-actions"><button v-if="draft.step>0" class="secondary" @click="draft.step--">上一步</button><button v-if="draft.step<2" class="primary" :disabled="busy" @click="nextStep">下一步<Icon name="arrow" /></button><button v-else class="primary" :disabled="busy" @click="saveRecord(false,true)">{{ busy?'正在保存…':'保存并分析' }}<Icon name="arrow" /></button></div><button v-if="draft.step === 2" class="secondary" :disabled="busy" @click="saveRecord(true)">提交给医生</button><button class="text-button centered" :disabled="busy" @click="saveRecord(false)">保存草稿，稍后继续</button><p class="autosave">{{ savingDraft?'正在保存到手机…':'输入已自动保留在手机' }}</p>
+        <div class="editor-actions"><button v-if="draft.step>0" class="secondary" @click="draft.step--">上一步</button><button v-if="draft.step<2" class="primary" :disabled="busy" @click="nextStep">下一步<Icon name="arrow" /></button><button v-else class="primary" :disabled="busy" @click="saveRecord(true,true)">{{ busy?'正在提交…':'保存、分析并提交' }}<Icon name="arrow" /></button></div><button class="text-button centered" :disabled="busy" @click="saveRecord(false)">保存草稿，稍后继续</button><p class="autosave">{{ savingDraft?'正在保存到手机…':'输入已自动保留在手机' }}</p>
       </template>
 
       <template v-if="(page === 'detail' || page === 'doctor') && current">
         <div class="page-heading"><p>{{ current.visit_date }} · {{ current.scenario==='self_check'?'首次自查':'随访记录' }}</p><h1>{{ current.site }}</h1><span class="status" :class="current.status">{{ statusText[current.status] }}</span></div>
         <section class="card form-card"><div v-if="current.photo && images[current.photo.id]" class="photo-frame"><img :src="images[current.photo.id]" alt="本次病损照片" /></div><div v-else class="photo-empty"><Icon name="camera" /><p>本次尚未添加照片</p></div><p v-if="current.symptoms">{{ cleanNote(current.symptoms) }}</p><div v-for="m in current.quality.messages" class="mini-note">{{ m }}</div><button v-for="r in current.reports" class="attachment report-button" @click="openReport(r)"><Icon name="file" /><span>{{ r.name }}</span><Icon name="chevron" /></button><details><summary>查看病史与检测字段</summary><p v-if="current.payload.dna_report_unusable" class="mini-note">报告注明DNA样本不合格</p><div v-for="h in options.history" class="summary-row"><span>{{ h.title }}</span><strong>{{ current.payload[h.key] ?? '未填写' }}</strong></div><div v-for="k in ['tct','dna_count','dna_total','dna_threshold','methylation','report_date','report_site','source_note']" class="summary-row"><span>{{ ({tct:'TCT',dna_count:'异常细胞数',dna_total:'总细胞数',dna_threshold:'DI阈值',methylation:'甲基化总数',report_date:'报告日期',report_site:'取材部位',source_note:'来源备注'} as Record<string,string>)[k] }}</span><strong>{{ current.payload[k] ?? '未填写' }}</strong></div></details></section>
+        <section v-if="page === 'doctor'" class="card form-card"><div class="section-title"><h2>模型分析</h2><button class="text-button" :disabled="busy" @click="toggleDoctorRun">{{ doctorRunOpen ? '收起' : '查看分析' }}<Icon :name="doctorRunOpen ? 'chevron' : 'arrow'" /></button></div><div v-if="doctorRunOpen" class="analysis-inline"><template v-if="run && run.result"><p class="prediction-label">模型预测：{{ run.result.median_class }}</p><GradeScoreAxis v-if="run.status === 'predicted' && resultClassLabels.length === 2 && run.result?.grade_reference?.anchors" :score="run.result.probabilities[1]" :references="run.result.grade_reference.anchors" /><div v-if="resultClassLabels.length" class="score-list"><div v-for="(p,i) in run.result.probabilities" :key="i"><div class="section-title"><span>{{ resultClassLabels[Number(i)] }}</span><strong>{{ (p*100).toFixed(1) }}%</strong></div><div class="score-track"><i :style="{width: p*100+'%'}" /></div></div></div><div v-if="run.result?.present" class="modality-grid"><span v-for="(yes,k) in run.result.present" :class="{missing:!yes}">{{ ({image:'照片',history:'病史',tct:'TCT',dna:'DNA',methylation:'甲基化'} as Record<string,string>)[k] }} · {{ modalityStatus(k, yes) }}</span></div><p v-if="run.result?.reason" class="mini-note">{{ run.result.reason }}</p><button class="text-button" :disabled="busy" @click="toggleDoctorRun">刷新结果</button></template><p v-else class="mini-note">这条记录还没有分析结果。在患者的记录里点「分析」可以生成。</p></div></section>
         <details v-if="visits.some(v => v.id !== current?.id && v.patient_id === current?.patient_id)"><summary>比较两次就诊</summary><VisitComparison :current="current" :visits="visits" :images="images" /></details>
         <template v-if="page === 'detail'">
           <section v-if="current.feedback" class="card form-card"><div class="section-title"><h2>医生反馈</h2></div><p>{{ cleanNote(current.feedback) }}</p><p class="muted">{{ current.reviewer }}</p></section>
@@ -393,7 +416,7 @@ onMounted(async () => {
           <section class="card form-card"><div class="section-title"><h2>模型分析</h2></div><button class="primary" :disabled="busy" @click="research(true)">分析<Icon name="arrow" /></button><button class="text-button centered" :disabled="busy" @click="research()">查看已有分析</button></section><button class="secondary" @click="editVisit(current)">补充或修改资料</button><button v-if="current.status==='draft'" class="primary" :disabled="busy" @click="submitExisting">提交给医生<Icon name="arrow" /></button><button v-if="role==='doctor'" class="text-button centered" @click="openVisit(current,true)">返回医生复核</button>
         </template>
         <template v-else>
-          <section class="card form-card"><h2>复核意见</h2><label>复核人代号<input v-model="review.reviewer" placeholder="例如：医生A" /></label><label>给患者的反馈<textarea v-model="review.feedback" rows="4" placeholder="说明下一步需要做什么" /></label><div class="chip-group"><label v-for="i in ['photo','report','history','other']" class="check-chip"><input type="checkbox" :value="i" v-model="review.requested_items" />补{{ itemText[i] }}</label></div><label v-if="review.requested_items.length">具体补充要求<textarea v-model="review.material_note" rows="2" placeholder="例如：补右侧舌缘照片，注明拍摄日期" /></label><details><summary>安排线下复诊</summary><label>复诊日期<input v-model="review.due" type="date" /></label><label>复诊事项<textarea v-model="review.task_note" rows="2" /></label></details><button class="primary" :disabled="busy" @click="sendReview">确认并发送反馈<Icon name="check" /></button><p class="autosave">未发送意见自动保留</p></section><button class="secondary" @click="research()">查看分析<Icon name="arrow" /></button>
+          <section class="card form-card"><h2>复核意见</h2><label>复核人代号<input v-model="review.reviewer" placeholder="例如：医生A" /></label><div class="section-title"><h2>需要患者做的事</h2></div><div class="chip-group"><label v-for="i in ['photo','report','history','other']" class="check-chip"><input type="checkbox" :value="i" v-model="review.requested_items" />补{{ itemText[i] }}</label><label class="check-chip"><input type="checkbox" v-model="wantFollowup" />复诊</label></div><label v-if="review.requested_items.length">具体补充要求<textarea v-model="review.material_note" rows="2" :placeholder="notePlaceholder" /></label><template v-if="wantFollowup"><label>复诊日期<input v-model="review.due" type="date" /></label><label>复诊事项<textarea v-model="review.task_note" rows="2" placeholder="例如：复看舌缘，评估是否需要活检" /></label></template><p v-if="composeFeedback()" class="feedback-preview">患者会看到：{{ composeFeedback() }}</p><button class="primary" :class="{ sent: reviewSent }" :disabled="busy || reviewSent" @click="sendReview">{{ reviewSent ? '已发送' : '确认并发送反馈' }}<Icon name="check" /></button><p class="autosave">未发送意见自动保留</p></section>
         </template>
       </template>
 
@@ -423,3 +446,27 @@ onMounted(async () => {
     <div v-if="busy" class="busy-dot" aria-label="正在处理" />
   </div>
 </template>
+
+<style>
+@keyframes reviewSentPop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.045); }
+  100% { transform: scale(1); }
+}
+.primary.sent,
+.primary.sent:disabled {
+  background: #2f9e6a;
+  color: #fff;
+  opacity: 1;
+  animation: reviewSentPop 460ms ease;
+}
+.feedback-preview {
+  font-size: 0.8125rem;
+  color: #57516b;
+  background: #f5f2fd;
+  border-radius: 12px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  margin: 14px 0 0;
+}
+</style>
