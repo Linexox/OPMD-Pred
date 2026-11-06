@@ -65,6 +65,22 @@ function queuePersist() {
 watch(draft, (v) => { if (v) { drafts.value[draftKey(v)] = JSON.parse(JSON.stringify(v)); queuePersist() } }, { deep: true })
 watch(review, (v) => { if (current.value && page.value === 'doctor') { reviewSent.value = false; reviewDrafts.value[current.value.id] = JSON.parse(JSON.stringify(v)); queuePersist() } }, { deep: true })
 watch(patientId, async (id, previous) => { if (id && id !== previous) { await Preferences.set({ key: 'patient', value: id }); await refresh() } })
+const loadingPhotos = new Set<string>()
+const visiblePhotoIds = computed(() => {
+  const rows = page.value === 'home' ? visits.value.slice(0, 2)
+    : ['records', 'doctor-list'].includes(page.value) ? visits.value : []
+  const ids = rows.flatMap(row => row.photo ? [row.photo.id] : [])
+  if (['detail', 'doctor', 'research'].includes(page.value) && current.value?.photo) ids.push(current.value.photo.id)
+  if (page.value === 'editor' && draft.value?.original_photo) ids.push(draft.value.original_photo.id)
+  return [...new Set(ids)]
+})
+watch(visiblePhotoIds, ids => {
+  for (const id of ids) {
+    if (images[id] || loadingPhotos.has(id)) continue
+    loadingPhotos.add(id)
+    photoUrl(id).then(url => { images[id] = url }).catch(() => {}).finally(() => loadingPhotos.delete(id))
+  }
+}, { immediate: true })
 async function act(fn: () => Promise<any>) { if (busy.value) return; (document.activeElement as HTMLElement)?.blur(); if(Capacitor.isNativePlatform()) MobileFiles.hideKeyboard().catch(()=>{}); busy.value = true; error.value = ''; try { return await fn() } catch (e: any) { error.value = e.message || '操作失败'; await nextTick(); document.querySelector<HTMLElement>('.error')?.focus() } finally { busy.value = false } }
 async function refresh() {
   try {
@@ -73,7 +89,6 @@ async function refresh() {
     visits.value = v; tasks.value = t; online.value = true
     try { await persist('cache', { patients: patients.value, patientId: patientId.value, visits: v, tasks: t }) }
     catch { error.value = '资料已加载，但暂未保存到手机。请重试。' }
-    for (const row of v) if (row.photo && !images[row.photo.id]) photoUrl(row.photo.id).then(url => images[row.photo!.id] = url).catch(() => {})
   } catch (e: any) { online.value = false; error.value = e.message }
 }
 async function connected() {

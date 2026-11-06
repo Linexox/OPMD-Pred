@@ -37,6 +37,12 @@ export async function setConnection(url: string, token: string) {
   if (!/^https?:\/\//.test(connection.url)) throw new Error('请输入完整服务地址，如 http://www.ming56.cn:9020')
   await Preferences.set({ key: 'connection', value: JSON.stringify(connection) })
 }
+function requestUrl(path: string): string {
+  const configured = defaultConnection.url.trim().replace(/\/$/, '')
+  if (import.meta.env.DEV && !Capacitor.isNativePlatform() && configured
+      && connection.url.replace(/\/$/, '') === configured) return path
+  return connection.url + path
+}
 export async function api<T = any>(path: string, method = 'GET', body?: any, requestId?: string): Promise<T> {
   if (!connection.url || !connection.token) throw new Error('请到“我的 → 连接设置”检查电脑连接')
   const headers: Record<string, string> = { Authorization: `Bearer ${connection.token}`, 'X-Result-Formats': 'binary-v1' }
@@ -47,7 +53,7 @@ export async function api<T = any>(path: string, method = 'GET', body?: any, req
       const result = await CapacitorHttp.request({ url: connection.url + path, method, headers, data: body, responseType: 'json', connectTimeout: 10000, readTimeout: 30000 })
       status = result.status; data = result.data
     } else {
-      const response = await fetch(connection.url + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30000) })
+      const response = await fetch(requestUrl(path), { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30000) })
       status = response.status; data = await response.text()
     }
   } catch { throw new Error('暂时连不上电脑服务，资料已保留。请检查服务是否运行后重试') }
@@ -58,13 +64,27 @@ export async function api<T = any>(path: string, method = 'GET', body?: any, req
   if (data === null || data === undefined) throw new Error('电脑服务返回内容异常，资料已保留，请重试')
   return data as T
 }
+let activePhotoRequests = 0
+const photoWaiters: (() => void)[] = []
 export async function photoUrl(id: string): Promise<string> {
+  // Leave browser HTTP connections available for opening records and analysing.
+  if (activePhotoRequests >= 2) await new Promise<void>(resolve => photoWaiters.push(resolve))
+  else activePhotoRequests++
+  try {
+    return await loadPhotoUrl(id)
+  } finally {
+    const next = photoWaiters.shift()
+    if (next) next()
+    else activePhotoRequests--
+  }
+}
+async function loadPhotoUrl(id: string): Promise<string> {
   if (Capacitor.isNativePlatform()) {
     const result = await CapacitorHttp.get({ url: connection.url + '/api/assets/' + id, headers: { Authorization: `Bearer ${connection.token}` }, responseType: 'arraybuffer' })
     if (result.status !== 200) throw new Error('照片暂时无法读取')
     return 'data:image/png;base64,' + result.data
   }
-  const response = await fetch(connection.url + '/api/assets/' + id, { headers: { Authorization: `Bearer ${connection.token}` } })
+  const response = await fetch(requestUrl('/api/assets/' + id), { headers: { Authorization: `Bearer ${connection.token}` }, signal: AbortSignal.timeout(30000) })
   if (!response.ok) throw new Error('照片暂时无法读取')
   return URL.createObjectURL(await response.blob())
 }
@@ -74,7 +94,7 @@ export async function attachmentData(id: string): Promise<string> {
     if (result.status !== 200) throw new Error('附件暂时无法读取')
     return result.data
   }
-  const response = await fetch(connection.url + '/api/assets/' + id, { headers: { Authorization: `Bearer ${connection.token}` } })
+  const response = await fetch(requestUrl('/api/assets/' + id), { headers: { Authorization: `Bearer ${connection.token}` } })
   if (!response.ok) throw new Error('附件暂时无法读取')
   const bytes = new Uint8Array(await response.arrayBuffer()); let text = ''; for (const b of bytes) text += String.fromCharCode(b); return btoa(text)
 }

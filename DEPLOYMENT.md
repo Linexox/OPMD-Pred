@@ -32,11 +32,12 @@ npm run build   # 类型检查与前端构建
 
 说明：
 - 修改 `.env.local` 后需重启 `npm run dev`。客户端已保存的连接配置可在页面“我的 → 连接设置”中覆盖。
+- 开发网页版访问与 `.env.local` 一致的后端地址时，API和照片请求由本地Vite服务转发，避免浏览器直接连接公网时受到本机代理影响。APK和正式网页构建仍使用填写的服务地址。
 - 前端构建会将 `.env.local` 中的口令打包进静态资源，内置口令的构建产物仅限内部测试使用。
 
 ### 2. Android APK 打包
 
-- 现有安装包：`../交付成果/APP/口腔随访-1.3.8.apk`（线上下载：`http://www.ming56.cn:9020/download`）。仅开发前端界面无需配置 Android 环境。
+- 现有安装包：`../交付成果/APP/口腔随访-1.3.9.apk`（线上下载：`http://www.ming56.cn:9020/download`）。仅开发前端界面无需配置 Android 环境。
 - 自行打包环境要求：Node.js 24、Java 21、Android SDK（API 36 及对应 Build-Tools）。
 
 打包步骤：
