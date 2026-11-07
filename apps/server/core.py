@@ -131,6 +131,7 @@ class Store:
             'kind': "TEXT NOT NULL DEFAULT 'appointment'", 'requested_items': "TEXT NOT NULL DEFAULT '[]'",
             'submission_id': "TEXT NOT NULL DEFAULT ''", 'submission_revision': 'INTEGER',
             'confirmed': "TEXT NOT NULL DEFAULT ''", 'confirmation_reviewer': "TEXT NOT NULL DEFAULT ''"}}
+        additions['visits'].update({'cell_images': "TEXT NOT NULL DEFAULT '[]'", 'methylation_genes': "TEXT NOT NULL DEFAULT '{}'"})
         pending = [(table, col, definition) for table, columns in additions.items() for col, definition in columns.items()
                    if col not in {r['name'] for r in self.db.execute(f'PRAGMA table_info({table})')}]
         if pending:
@@ -179,6 +180,8 @@ class Store:
         value = dict(row)
         value['payload'] = json.loads(value['payload'])
         value['quality'] = json.loads(value['quality'])
+        value['cell_images'] = json.loads(value.get('cell_images') or '[]') if 'cell_images' in value else []
+        value['methylation_genes'] = json.loads(value.get('methylation_genes') or '{}') if 'methylation_genes' in value else {}
         return value
 
     def _copy(self, source, visit_id, image=False):
@@ -202,7 +205,8 @@ class Store:
         return str(target.relative_to(self.root))
 
     def save_visit(self, patient_id, scenario, site, visit_date, symptoms, payload,
-                   image_source='', report_source='', visit_id=None, task_id=''):
+                   image_source='', report_source='', visit_id=None, task_id='', cell_image_sources=None,
+                   methylation_genes=None):
         if scenario not in SCENARIOS or site not in SITES:
             raise ValueError('请确认场景和部位')
         date.fromisoformat(visit_date)
@@ -224,6 +228,8 @@ class Store:
         original_image = old['original_image'] if old else ''
         original_sha = old['original_sha'] if old else ''
         report = old['report'] if old else ''
+        cell_images = json.loads(old['cell_images'] or '[]') if old and 'cell_images' in old.keys() else []
+        stored_genes = json.loads(old['methylation_genes'] or '{}') if old and 'methylation_genes' in old.keys() else {}
         q = old['quality'] if old else {}
         if image_source:
             q = quality(image_source)
@@ -239,20 +245,33 @@ class Store:
                 if sha not in hashes:
                     existing.append(self._copy(p, vid)); hashes.add(sha)
             report = json.dumps(existing, ensure_ascii=False)
+        if cell_image_sources is not None:
+            cell_images = []
+            existing_cells = []
+            for source in cell_image_sources:
+                source_digest = digest(source)
+                if source_digest in existing_cells:
+                    continue
+                copied = self._copy(source, vid, True)
+                cell_images.append(copied)
+                existing_cells.append(source_digest)
+        if methylation_genes is not None:
+            stored_genes = dict(methylation_genes)
         paths = json.loads(report) if report else []
         payload['report_sha256s'] = [digest(self.root / p) for p in paths]
         values = (scenario, site, visit_date, symptoms.strip(), json.dumps(payload, ensure_ascii=False),
                   image, digest(self.root / image) if image else '', original_image, original_sha,
-                  report, json.dumps(q, ensure_ascii=False), now())
+                  report, json.dumps(q, ensure_ascii=False), json.dumps(cell_images, ensure_ascii=False),
+                  json.dumps(stored_genes, ensure_ascii=False), now())
         with self.db:
             if old:
                 self.snapshot(vid, 'before_edit')
                 self.db.execute('''UPDATE visits SET scenario=?,site=?,visit_date=?,symptoms=?,payload=?,image=?,
-                   image_sha=?,original_image=?,original_sha=?,report=?,quality=?,updated=?,revision=revision+1,status='draft',feedback='',reviewer='',reviewed=''
+                   image_sha=?,original_image=?,original_sha=?,report=?,quality=?,cell_images=?,methylation_genes=?,updated=?,revision=revision+1,status='draft',feedback='',reviewer='',reviewed=''
                    WHERE id=?''', values + (vid,))
             else:
                 self.db.execute('''INSERT INTO visits(scenario,site,visit_date,symptoms,payload,image,image_sha,
-                   original_image,original_sha,report,quality,updated,id,patient_id,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                   original_image,original_sha,report,quality,cell_images,methylation_genes,updated,id,patient_id,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                                 values + (vid, patient_id, now()))
             if task:
                 self.db.execute('UPDATE visits SET task_id=? WHERE id=?', (task_id, vid))
@@ -273,10 +292,11 @@ class Store:
                     raise ValueError('任务对应的提交版本已改变')
                 present = {'photo': bool(visit['image']), 'report': bool(json.loads(visit['report'] or '[]')),
                            'history': any(visit['payload'].get(k) is not None for k, _, _ in HISTORY),
+                           'cell_image': bool(json.loads(visit.get('cell_images') or '[]')),
                            'other': bool(visit['symptoms'].strip())}
                 missing = [k for k in task['requested_items'] if not present[k]]
                 if missing:
-                    titles = {'photo': '照片', 'report': '检测报告', 'history': '病史', 'other': '文字说明'}
+                    titles = {'photo': '照片', 'cell_image': '细胞显微图', 'report': '检测报告', 'history': '病史', 'other': '文字说明'}
                     raise ValueError('尚未补充：' + '、'.join(titles[k] for k in missing))
                 self.db.execute("UPDATE tasks SET status='submitted' WHERE id=?", (task['id'],))
             self.db.execute("UPDATE visits SET status='submitted',updated=? WHERE id=?", (now(), visit_id))
@@ -294,7 +314,7 @@ class Store:
             if not task_note.strip():
                 raise ValueError('设置复诊日期时请填写任务说明')
         requested_items = sorted(set(requested_items or []))
-        if not set(requested_items) <= {'photo', 'report', 'history', 'other'}:
+        if not set(requested_items) <= {'photo', 'cell_image', 'report', 'history', 'other'}:
             raise ValueError('不支持的待补资料类型')
         if requested_items and not material_note.strip():
             raise ValueError('请具体说明要补什么、拍哪里或核对哪份报告')
@@ -366,3 +386,4 @@ class Store:
 
     def close(self):
         self.db.close()
+

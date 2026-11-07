@@ -1,0 +1,19 @@
+{
+  "seed": 42,
+  "dimension": 32,
+  "dropout": 0.1,
+  "batch_size": 16,
+  "fusion_epochs": 50,
+  "fusion_patience": 8,
+  "warmup_epochs": 5,
+  "lr": 0.001,
+  "methylation_lr": 0.0001,
+  "weight_decay": 0.01,
+  "task": "three_class",
+  "class_names": ["正常/轻度", "中度", "重度"],
+  "photo_features": "data/processed/methylation-cell-transfer-20261106/attempt1/photos.npz",
+  "cell_features": "outputs/experiments/oral-cytology-transfer-20261106/sysu-attempt1/oral_pretrained/cell_features.npz",
+  "methylation_checkpoint": "outputs/experiments/methylation-cell-transfer-20261106/attempt2/methylation_encoder.pt",
+  "protocol": "data/processed/methylation-cell-transfer-20261106/attempt1/bundle.json",
+  "scope": "Five fixed nested folds from the current SYSU development protocol. Same inputs and frozen photo/cell features as the current binary mainline; only the output task changes from binary to three classes. Research only; no APP or online service change."
+}

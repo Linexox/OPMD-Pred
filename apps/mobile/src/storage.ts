@@ -1,10 +1,10 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
-export type LocalFile = { path: string; name: string; kind: 'photo' | 'report'; uploaded?: string; upload_request?: string }
+export type LocalFile = { path: string; name: string; kind: 'photo' | 'cell_image' | 'report'; uploaded?: string; upload_request?: string }
 export const MobileFiles = registerPlugin<{ pickReport(): Promise<{ path: string; name: string }>; openFile(options: {path: string; mime: string}): Promise<void>; hideKeyboard(): Promise<void> }>('MobileFiles')
 const webFiles = new Map<string, string>()
 const pendingWrites = new Map<string, Promise<void>>()
-export async function putFile(data: string, name: string, kind: 'photo' | 'report'): Promise<LocalFile> {
+export async function putFile(data: string, name: string, kind: 'photo' | 'cell_image' | 'report'): Promise<LocalFile> {
   const path = 'pending/' + crypto.randomUUID() + '.' + (name.split('.').pop() || 'jpg').toLowerCase()
   if (Capacitor.isNativePlatform()) await Filesystem.writeFile({ path, data, directory: Directory.Data, recursive: true })
   else {

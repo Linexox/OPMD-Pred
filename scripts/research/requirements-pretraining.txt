@@ -1,0 +1,3 @@
+# Additional split-generation dependency, matching the completed GPU experiments.
+# Base vision/training and plotting dependencies remain in the root pyproject.toml.
+scikit-learn==1.9.1

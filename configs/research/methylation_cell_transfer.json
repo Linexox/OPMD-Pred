@@ -1,0 +1,17 @@
+{
+  "seed": 42,
+  "dimension": 32,
+  "dropout": 0.1,
+  "batch_size": 16,
+  "pretrain_epochs": 200,
+  "pretrain_patience": 20,
+  "fusion_epochs": 50,
+  "fusion_patience": 8,
+  "warmup_epochs": 5,
+  "lr": 0.001,
+  "methylation_lr": 0.0001,
+  "weight_decay": 0.01,
+  "decision_threshold": 0.5,
+  "image_policy": "Current mainline uses frozen Zenodo ResNet18 oral-photo features and frozen external oral-cytology pretrained ResNet18 cell features. ImageNet cell features remain a control. Train projections, table and methylation encoders, Transformer and binary head.",
+  "scope": "Research on master: external GSE204943 methylation pretraining plus external oral-cell pretraining. Five-fold single-model and six-fold mean-of-five evaluation entrypoints are selected through pretraining_mainline.json. Historical four-combination runner remains a control; no APP deployment or old test-set evaluation."
+}

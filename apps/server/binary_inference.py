@@ -55,7 +55,17 @@ class BinaryResearchEngine:
             image_sha = visit.get('original_sha') or visit.get('image_sha') or ''
             if not image_sha or digest(photo) != image_sha:
                 raise ValueError('照片已改变，请重新保存资料')
-        output = self.predictor.predict(fields, photo)
+        cell_paths = []
+        for relative in visit.get('cell_images', []) or []:
+            candidate = (root / relative).resolve()
+            if not candidate.is_relative_to(root) or not candidate.is_file():
+                raise ValueError('细胞显微图路径不可用，请重新保存资料')
+            cell_paths.append(candidate)
+        genes = visit.get('methylation_genes') or {}
+        if hasattr(self.predictor, 'supports_cell_images'):
+            output = self.predictor.predict(fields, photo, cell_images=cell_paths, methylation_genes=genes)
+        else:
+            output = self.predictor.predict(fields, photo)
         common = {'input_revision':visit['revision'], 'model_id':self.model_id,
                   'image_sha256':image_sha, 'class_labels':['正常/轻度', '中度及以上']}
         fingerprint = getattr(self.predictor, 'verified_model_fingerprint', None)
@@ -75,10 +85,11 @@ class BinaryResearchEngine:
         if output.get('prediction') != prediction:
             raise ValueError('二分类模型类别与分数不一致')
         present = {'image':photo is not None,
+                   'cell_images':bool(cell_paths),
                    'history':any(fields[k] is not None for k, _, _ in HISTORY),
                    'tct':fields['TCT'] is not None,
                    'dna':fields['dna_report_abnormal_ratio'] is not None,
-                   'methylation':fields['methylation_total'] is not None}
+                   'methylation':fields['methylation_total'] is not None or any(v is not None for v in genes.values())}
         vocabularies = getattr(self.predictor, 'tct_reference_vocabularies', None)
         tct_status = 'missing' if fields['TCT'] is None else 'unavailable' if vocabularies is None else (
             'known' if all(fields['TCT'] in values for values in vocabularies) else 'unknown')
@@ -88,7 +99,7 @@ class BinaryResearchEngine:
                 **({'dna_excluded_reason':'report_unusable'} if (visit.get('payload') or {}).get('dna_report_unusable') is True else {}),
                 'tct_check_status':tct_status,
                 **({'unknown_tct':tct_status == 'unknown'} if tct_status in ('known','unknown') else {}),
-                'model_inputs':binary_input_fingerprints(fields, image_sha),
+                'model_inputs':{**binary_input_fingerprints(fields, image_sha), 'cell_images':{'present':bool(cell_paths),'count':len(cell_paths),'sha256': [digest(p) for p in cell_paths]}, 'methylation_genes':genes},
                 'input_context':{'visit_id':visit['id'], 'patient_id':visit.get('patient_id'),
                     'site':visit.get('site'), 'visit_date':visit.get('visit_date'),
                     'task_id':visit.get('task_id'), 'revision':visit['revision']}}

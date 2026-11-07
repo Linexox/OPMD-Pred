@@ -14,6 +14,7 @@ def main():
     parser.add_argument('--data-dir', type=Path, default=project/'runtime')
     parser.add_argument('--token-file', type=Path, default=project/'runtime/pairing-token.txt')
     parser.add_argument('--manifest', type=Path, default=default_manifest)
+    parser.add_argument('--cell-pretrained', action='store_true', help='使用当前主线的甲基化与脱落细胞预训练模型')
     args = parser.parse_args()
     args.data_dir = args.data_dir.resolve()
     args.manifest = args.manifest.resolve()
@@ -35,22 +36,34 @@ def main():
     sys.path.insert(0, str(code))
     sys.path.insert(0, str(args.manifest.parent))
     os.chdir(code)
-    from prototype_binary_predictor import PrivateBinaryPredictor
-    from mean_ensemble_predictor import MeanEnsemblePredictor
-    from sysu_tabular_common import offline_predictions
+    from cell_pretrained_predictor import CellPretrainedPredictor
     import torch
     import uvicorn
     torch.set_num_threads(2)
     token = args.token_file.read_text(encoding='utf8').strip()
     if not token:
         raise ValueError('连接口令文件为空')
-    with offline_predictions():
+    mode_file = runtime / 'model-mode.txt'
+    use_cell_pretrained = args.cell_pretrained or (mode_file.is_file() and mode_file.read_text(encoding='utf-8').strip() == 'cell-pretrained')
+    if use_cell_pretrained:
+        offline_context = None
+    else:
+        from sysu_tabular_common import offline_predictions
+        offline_context = offline_predictions()
+    context = offline_context if offline_context is not None else importlib.import_module('contextlib').nullcontext()
+    with context:
         import json
         model_manifest = json.loads(args.manifest.read_text(encoding='utf-8'))
-        if model_manifest.get('format') == 'sysu-five-complete-model-mean-v1':
+        if use_cell_pretrained:
+            predictor = CellPretrainedPredictor(project, device='cpu')
+            model_id = predictor.model_id
+        elif model_manifest.get('format') == 'sysu-five-complete-model-mean-v1':
+            from mean_ensemble_predictor import MeanEnsemblePredictor
+            from prototype_binary_predictor import PrivateBinaryPredictor
             predictor = MeanEnsemblePredictor(args.manifest, device='cpu')
             model_id = model_manifest['model_id']
         else:
+            from prototype_binary_predictor import PrivateBinaryPredictor
             predictor = PrivateBinaryPredictor(args.manifest, device='cpu')
             model_id = 'sysu-resnet18-tabpfn-transformer-seed42-fold0'
         engine = BinaryResearchEngine(predictor, model_id)

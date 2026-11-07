@@ -2,7 +2,7 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { shouldRefreshConnection } from './connection-defaults'
 export type Asset = { id: string; name: string; kind: string }
-export type Visit = { id: string; patient_id: string; scenario: string; site: string; visit_date: string; symptoms: string; revision: number; status: string; task_id: string; payload: Record<string, any>; photo: Asset | null; reports: Asset[]; feedback: string; reviewer: string; quality: { messages?: string[] }; feedback_history: any[] }
+export type Visit = { id: string; patient_id: string; scenario: string; site: string; visit_date: string; symptoms: string; revision: number; status: string; task_id: string; payload: Record<string, any>; photo: Asset | null; cell_images: Asset[]; methylation_genes?: Record<string, number | null>; reports: Asset[]; feedback: string; reviewer: string; quality: { messages?: string[] }; feedback_history: any[] }
 export type Task = { id: string; patient_id: string; visit_id: string; source_date: string; site: string; kind: string; note: string; due: string; status: string; requested_items: string[]; submission_id: string }
 export type ModelInputName = 'image' | 'history' | 'tct' | 'dna' | 'methylation'
 export type InputContribution = { modality: ModelInputName; label: string; present: boolean; value: number }

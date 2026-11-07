@@ -1,12 +1,16 @@
 # 当前工作区与运行位置
 
-更新：2026年11月6日。本文件只描述当前状态；旧过程见docs/worklog，不再在这里叠加历史“当前状态”。
+更新：2026年11月7日。本文件只描述当前状态；旧过程见docs/worklog，不再在这里叠加历史“当前状态”。
 
 ## 当前入口
 
-- 唯一开发仓库：D:/.Workspace/医工/OPMD-Pred（实际路径见下表），分支master。模型与APP在同一仓库，分别维护。
+本地新模型服务：apps/server/launch-cell-pretrained.ps1，默认端口8765，使用甲基化与脱落细胞预训练五模型。lnx主服务也已切换到同一模型，公网入口为www.ming56.cn:9020。
+
+- 模型研究与APP的唯一开发目录：D:/.Workspace/医工/OPMD-Pred，分支master。
+- 当前研究主线：口腔照片ResNet-18＋GSE204943甲基化编码器＋外部脱落细胞ResNet-18＋普通表格网络＋Transformer二分类。入口scripts/research/run_pretraining_mainline.py；配置configs/research/pretraining_mainline.json。
+- 原codex/model-experiments工作树停止开发，源码与分支暂留；新增数据、权重、结果和报告已迁入主目录，不再依赖该工作树运行。
 - 人可直接使用的产物：仓库上级的交付成果。最新安装包为APP/口腔随访-1.3.9.apk。
-- 线上APP使用五个完整ResNet-18＋TabPFN＋Transformer二分类模型，各占20%汇总概率；分类网络训练Dropout为0.1，不使用Router。结果页参考点来自这套结构的六折留出分数。
+- lnx当前服务使用五个外部细胞预训练的多模态模型，各占20%汇总概率，模型编号为sysu-oral-cell-pretrained-mean5-seed42。线上APP仍使用同一API协议，APK是否使用它取决于连接地址和服务口令。
 - Windows本机launch.ps1仍启动旧三分类开发服务；它没有安装线上全部二分类依赖，不应与线上成绩混称。
 
 | 用途 | 当前路径 |
@@ -15,13 +19,20 @@
 | APP前端、Android工程 | apps/mobile |
 | API、记录管理与部署启动 | apps/server |
 | 固定版本二分类推理实现 | apps/server/binary_runtime；不含模型或患者附件 |
-| 模型结构与训练组件 | src/opmd_pred |
-| 训练和复现脚本 | scripts/research；保留当前五模型及其图片编码器训练入口 |
+| 当前研究模型结构 | scripts/research/run_methylation_cell_transfer.py中的Fusion、MethylEncoder、Inputs；现有其他组件仍在src/opmd_pred |
+| 训练和复现脚本 | scripts/research；新主线用run_pretraining_mainline.py，原APP五模型训练入口作为部署模型对照保留 |
 | 当前五模型二分类私有模型包 | models/app/binary-mean；manifest.json列出五个成员及固定20%权重 |
 | 切换前单模型二分类包 | models/app/binary；保留原位置用于恢复，不是当前主模型 |
 | 旧三分类权重 | models/app/classifier.pt、image_encoder.pt；本机models.local.json仍引用它们 |
 | 原始数据接收目录 | ../DATASETS；当前data/sysu、data/zenodo及历史数据暂保留，未做删除去重 |
 | 整理后的研究数据 | data/processed/sysu；原始病理、图片和就诊关联仍需按研究记录核对 |
+| PDF提取的TCT/DNA细胞图像 | data/processed/sysu/tct-dna-cell-images/20261106；review.private.html按原患者目录浏览；其中经明确报告对应和去重接受的视野图已用于当前研究模型，APP尚未接入 |
+| 当前按样本文件夹挑选细胞图 | data/processed/sysu/cell-image-samples/20261106；index.private.html；以DATASETS/sysu/data-20250513下等级1/2/3的146个原文件夹为单位，仅使用视野图，排除DNA拼图与单核小图 |
+| 当前研究训练输入 | data/processed/methylation-cell-transfer-20261106/attempt1：117份SYSU、118份外部基因表、口腔照片特征及96份SYSU资料对应的188张细胞视野图 |
+| 外部细胞整理数据与划分 | data/processed/oral-cytology-20686174：19,979张局部图的索引tar、患者划分、SYSU六折与新增种子名单 |
+| 甲基化预训练权重 | outputs/experiments/methylation-cell-transfer-20261106/attempt2/methylation_encoder.pt；原实验其他组合保留 |
+| 细胞预训练权重与原五折模型 | outputs/experiments/oral-cytology-transfer-20261106：pretrain-attempt1/best.pt及sysu-attempt1/oral_pretrained/fold0至fold4 |
+| 六折五模型及新增种子 | outputs/experiments/cell-sixfold-ensemble-20261106：sixfold-attempt1和multiseed-attempt1 |
 | 实验权重、预测、配置及失败结果 | outputs/experiments |
 | 工程检查与文件迁移记录 | outputs/checks；本次共享整理为workspace-review-20261105 |
 | 可直接阅读的报告与比赛材料 | ../交付成果 |
@@ -56,3 +67,6 @@ Linux运行数据库、附件、口令、下载包仍在该项目runtime，未�
 成品只有交付成果中的一个编辑来源；固定APK分发副本因服务需要保留。文件迁移清单位于outputs/checks/workspace-organization-20261103/moves.json。历史实验内部命令和校验记录保留当时路径，必要时对照迁移清单，不批量改写原始实验证据。
 
 此前经用户确认的248个源码文件已删除，执行范围见../交付成果/代码精简审阅清单.md。本次Git对象整理保留分支及提交引用；源码残留缓存和空目录的删除被自动审批拒绝，未执行，具体目录在outputs/checks/workspace-review-20261105/source-cache-cleanup.json。Zenodo、原始数据、部署模型、实验结果和运行数据库保持原位置。
+
+
+

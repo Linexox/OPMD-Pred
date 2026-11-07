@@ -129,10 +129,15 @@ def create_app(root, token, model_config, research_engine=None):
     def public_visit(s, vid):
         v = s.visit(vid)
         v['photo'] = asset(s, v['image'], 'photo') if v['image'] else None
+        cell_paths = v.get('cell_images') or []
+        if isinstance(cell_paths, str): cell_paths = json.loads(cell_paths)
+        v['cell_images'] = [asset(s, p, 'cell_image') for p in cell_paths]
+        genes = v.get('methylation_genes') or {}
+        v['methylation_genes'] = json.loads(genes) if isinstance(genes, str) else genes
         v['reports'] = [asset(s, p, 'report') for p in json.loads(v['report'] or '[]')]
         v['feedback_history'] = [{k: row[k] for k in ('revision', 'feedback', 'reviewer', 'reviewed')}
                                  for row in s.feedback_history(vid)]
-        for k in ('image', 'original_image', 'report'):
+        for k in ('image', 'original_image', 'report', 'cell_images', 'methylation_genes'):
             v.pop(k, None)
         return v
 
@@ -141,7 +146,8 @@ def create_app(root, token, model_config, research_engine=None):
         return {'status': 'ready', 'name': '口腔随访助手', 'version': 1,
                 'model_task': 'binary' if getattr(engine, 'requires_binary_client', False) else 'three_class',
                 'model_id': getattr(engine, 'model_id', None),
-                'capabilities': {'dna_report_unusable': bool(getattr(engine, 'supports_dna_report_unusable', False))}}
+                'capabilities': {'dna_report_unusable': bool(getattr(engine, 'supports_dna_report_unusable', False)),
+                                 'cell_images': True, 'methylation_genes': True}}
 
     @app.get('/download', response_class=HTMLResponse)
     def download_page():
@@ -220,8 +226,8 @@ def create_app(root, token, model_config, research_engine=None):
                 name = str(body.get('name', ''))
                 kind = body.get('kind')
                 ext = Path(name).suffix.lower()
-                if kind not in ('photo', 'report') or ext not in ('.jpg', '.jpeg', '.png', '.pdf') or kind == 'photo' and ext == '.pdf':
-                    raise ValueError('照片支持JPG/PNG；报告支持PDF、JPG、PNG')
+                if kind not in ('photo', 'cell_image', 'report') or ext not in ('.jpg', '.jpeg', '.png', '.pdf') or kind in ('photo', 'cell_image') and ext == '.pdf':
+                    raise ValueError('照片和细胞显微图支持JPG/PNG；报告支持PDF、JPG、PNG')
                 try:
                     data = base64.b64decode(body.get('data', ''), validate=True)
                 except Exception as exc:
@@ -279,6 +285,8 @@ def create_app(root, token, model_config, research_engine=None):
         saved = s.save_visit(body['patient_id'], body['scenario'], body['site'], body['visit_date'], body.get('symptoms', ''),
                              body.get('payload', {}), image_source=source(body.get('photo_id'), 'photo'),
                              report_source=[source(aid, 'report') for aid in body.get('report_ids', [])],
+                             cell_image_sources=None if 'cell_image_ids' not in body else [source(aid, 'cell_image') for aid in body.get('cell_image_ids', [])],
+                             methylation_genes=body.get('methylation_genes'),
                              visit_id=vid, task_id=body.get('task_id', ''))
         return public_visit(s, saved)
 

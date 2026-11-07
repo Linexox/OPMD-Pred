@@ -1,0 +1,18 @@
+{
+  "seed": 42,
+  "epochs": 30,
+  "patience": 6,
+  "warmup_epochs": 2,
+  "batch_size": 64,
+  "samples_per_epoch": 4096,
+  "workers": 4,
+  "backbone_lr": 0.0001,
+  "classifier_lr": 0.001,
+  "weight_decay": 0.0001,
+  "input_size": 224,
+  "crop_size": 256,
+  "sysu_stride": 128,
+  "balance": "uniform class, then uniform patient within class, then uniform crop within patient; unweighted cross entropy",
+  "augmentation": "horizontal and vertical flips, 90-degree rotations, brightness and contrast 0.1; no random crop, hue or saturation change",
+  "downstream": "same five SYSU folds and seed42; fixed GSE methylation encoder; compare ImageNet cell weights against oral-cytology pretrained cell weights with identical 256-pixel SYSU tiling"
+}

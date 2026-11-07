@@ -1,0 +1,28 @@
+{
+  "format": "opmd-research-mainline-v1",
+  "model": "Zenodo ResNet-18 oral photos + GSE204943 gene encoder + pretrained oral-cell ResNet-18 + table network + Transformer",
+  "task": ["正常/轻度", "中度及以上"],
+  "genes": ["CDKN2A", "TIMP3", "ZNF582", "TMEFF2", "TFPI2", "SHOX2", "PAX1", "MGMT", "SOX1", "DAPK1"],
+  "training_config": "configs/research/methylation_cell_transfer.json",
+  "cell_pretraining_config": "configs/research/oral_cytology_pretraining.json",
+  "data": "data/processed/methylation-cell-transfer-20261106/attempt1",
+  "external_cell_data": "data/processed/oral-cytology-20686174/attempt1",
+  "methyl_checkpoint": "outputs/experiments/methylation-cell-transfer-20261106/attempt2/methylation_encoder.pt",
+  "cell_checkpoint": "outputs/experiments/oral-cytology-transfer-20261106/pretrain-attempt1/best.pt",
+  "feature_root": "outputs/experiments/oral-cytology-transfer-20261106/sysu-attempt1",
+  "sixfold_protocol": "data/processed/oral-cytology-20686174/sixfold-app-protocol.json",
+  "multiseed_protocols": "data/processed/oral-cytology-20686174/random-protocols",
+  "fivefold_results": "outputs/experiments/oral-cytology-transfer-20261106/sysu-attempt1",
+  "sixfold_results": "outputs/experiments/cell-sixfold-ensemble-20261106/sixfold-attempt1",
+  "multiseed_results": "outputs/experiments/cell-sixfold-ensemble-20261106/multiseed-attempt1",
+  "cache": "outputs/experiments/cache/pretraining-mainline",
+  "artifacts_sha256": {
+    "outputs/experiments/cache/pretraining-mainline/torch/checkpoints/resnet18-f37072fd.pth": "f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec",
+    "outputs/experiments/zenodo/first-step-supplement/classification/resnet18/balanced/seed42/attempt1/encoder.pt": "ebdf56d6c2ee46be70a2a7ff58cbbef1b0033caec43a713aa83b92c5de59cc19",
+    "outputs/experiments/oral-cytology-transfer-20261106/pretrain-attempt1/best.pt": "0c8cfe15a1cebfb90251d4b579f28a296b7a4c4a45a0db39d5c96ce1abb4873b",
+    "outputs/experiments/methylation-cell-transfer-20261106/attempt2/methylation_encoder.pt": "fae3865dcd4b5c0efad3419d893f293b0fbef28095ff3925049ae792a3e809bd",
+    "data/processed/methylation-cell-transfer-20261106/attempt1/bundle.json": "5c6a1e514a034f8958b853676545c1d86fc64574def1cebd6ec0d048d616d0f3",
+    "outputs/experiments/oral-cytology-transfer-20261106/sysu-attempt1/oral_pretrained/cell_features.npz": "78ea794e0dcc3d4c6055551f7d1b3aafd7fdd237ee9e19616fc36f4fb6f1eca5"
+  },
+  "scope": "Current research method on master; no APP model selection or deployment. Five-fold single-model and six-fold mean-of-five evaluations remain distinct."
+}

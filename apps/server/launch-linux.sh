@@ -8,7 +8,7 @@ export PYTHONUTF8=1
 export XDG_CACHE_HOME="$PROJECT_ROOT/runtime/cache"
 export HF_HOME="$PROJECT_ROOT/runtime/cache/huggingface"
 export PIP_CACHE_DIR="$PROJECT_ROOT/runtime/cache/pip"
-if [[ -f "$PROJECT_ROOT/runtime/model-mode.txt" ]] && [[ "$(cat "$PROJECT_ROOT/runtime/model-mode.txt")" == "binary" ]]; then
+if [[ -f "$PROJECT_ROOT/runtime/model-mode.txt" ]] && [[ "$(cat "$PROJECT_ROOT/runtime/model-mode.txt")" == "binary" || "$(cat "$PROJECT_ROOT/runtime/model-mode.txt")" == "cell-pretrained" ]]; then
   exec "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/apps/server/binary_linux_service.py" "$@"
 fi
 exec "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/apps/server/linux_service.py" "$@"
