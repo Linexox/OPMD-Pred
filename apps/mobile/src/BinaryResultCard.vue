@@ -25,7 +25,7 @@ const ariaLabel = computed(() => score.value === null ? '二分类结果暂不�
         <p class="binary-result-kicker">模型提示</p>
         <h3>{{ direction }}</h3>
       </div>
-      <div class="binary-result-score"><span>综合分数</span><strong>{{ percent }}</strong></div>
+      <div class="binary-result-score"><span>中度及以上分数</span><strong>{{ percent }}</strong></div>
     </div>
     <div class="binary-direction" role="img" :aria-label="ariaLabel">
       <div class="binary-direction-track">

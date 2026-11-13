@@ -4,8 +4,7 @@ import { api } from './api'
 import { readFile, type LocalFile } from './storage'
 import { siteGuide } from './site-guide'
 const props = defineProps<{ site: string; photo?: LocalFile; hasPhoto: boolean }>()
-defineEmits<{ retake: [] }>()
-const status = ref('idle'), messages = ref<string[]>([]), kept = ref(false), showGuide = ref(false)
+const status = ref('idle'), messages = ref<string[]>([]), showGuide = ref(false)
 let request = 0
 
 const guide = computed(() => siteGuide(props.site))
@@ -20,7 +19,7 @@ const TIPS = [
 
 async function check() {
   const photo = props.photo, id = ++request
-  kept.value = false; messages.value = []; status.value = photo ? 'checking' : 'idle'
+  messages.value = []; status.value = photo ? 'checking' : 'idle'
   if (!photo) return
   try {
     const result = await api<{ messages: string[] }>('/api/photo-quality', 'POST', { data: await readFile(photo) })
@@ -52,10 +51,8 @@ watch(() => props.photo?.path, check, { immediate: true })
       <p v-else-if="status === 'failed'">暂时无法检查照片，原图与已填资料已保留。可以继续填写，联网后再试。</p>
       <p v-else-if="status === 'ready' && messages.length">{{ messages[0] }}</p>
       <p v-else-if="status === 'ready'">未发现明显的尺寸、模糊或曝光问题。</p>
-      <p v-else>照片已保留，可以继续填写。</p>
+      <p v-else>照片已添加，可以继续填写。</p>
       <p class="cg-selfcheck">对照看一眼：病损看得清吗？周围组织带上了吗？有没有反光或阴影挡住？</p>
-      <p v-if="kept">已保留这张照片，请继续填写。</p>
-      <div v-if="!kept" class="two-buttons"><button type="button" class="secondary" @click="$emit('retake')">重拍</button><button type="button" class="secondary" @click="kept = true">保留并继续</button></div>
       <button v-if="status === 'failed'" type="button" class="text-button" @click="check">重新检查</button>
     </div>
   </div>
