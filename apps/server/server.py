@@ -137,7 +137,7 @@ def create_app(root, token, model_config, research_engine=None):
         v['reports'] = [asset(s, p, 'report') for p in json.loads(v['report'] or '[]')]
         v['feedback_history'] = [{k: row[k] for k in ('revision', 'feedback', 'reviewer', 'reviewed')}
                                  for row in s.feedback_history(vid)]
-        for k in ('image', 'original_image', 'report', 'cell_images', 'methylation_genes'):
+        for k in ('image', 'original_image', 'report'):
             v.pop(k, None)
         return v
 

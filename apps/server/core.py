@@ -228,8 +228,8 @@ class Store:
         original_image = old['original_image'] if old else ''
         original_sha = old['original_sha'] if old else ''
         report = old['report'] if old else ''
-        cell_images = json.loads(old['cell_images'] or '[]') if old and 'cell_images' in old.keys() else []
-        stored_genes = json.loads(old['methylation_genes'] or '{}') if old and 'methylation_genes' in old.keys() else {}
+        cell_images = list(old['cell_images']) if old else []
+        stored_genes = dict(old['methylation_genes']) if old else {}
         q = old['quality'] if old else {}
         if image_source:
             q = quality(image_source)
@@ -245,16 +245,15 @@ class Store:
                 if sha not in hashes:
                     existing.append(self._copy(p, vid)); hashes.add(sha)
             report = json.dumps(existing, ensure_ascii=False)
-        if cell_image_sources is not None:
-            cell_images = []
-            existing_cells = []
+        if cell_image_sources:
+            existing_cells = {digest(self.root / p) for p in cell_images}
             for source in cell_image_sources:
                 source_digest = digest(source)
                 if source_digest in existing_cells:
                     continue
                 copied = self._copy(source, vid, True)
                 cell_images.append(copied)
-                existing_cells.append(source_digest)
+                existing_cells.add(source_digest)
         if methylation_genes is not None:
             stored_genes = dict(methylation_genes)
         paths = json.loads(report) if report else []
